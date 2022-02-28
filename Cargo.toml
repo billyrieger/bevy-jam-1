@@ -9,3 +9,4 @@ publish = false
 
 [dependencies]
 bevy = { version = "0.6.1", features = ["dynamic"] }
+bevy_easings = "0.6.0"
