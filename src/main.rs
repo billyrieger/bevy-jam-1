@@ -1,3 +1,5 @@
+#![feature(bool_to_option)]
+
 use std::time::Duration;
 
 use bevy::{asset::LoadState, prelude::*};
@@ -10,6 +12,7 @@ fn main() {
         .insert_resource(WindowDescriptor {
             width: 272.0 * 3.0,
             height: 256.0 * 3.0,
+            vsync: true,
             ..Default::default()
         })
         .add_plugins(DefaultPlugins)
@@ -19,7 +22,7 @@ fn main() {
         .add_system_set(SystemSet::on_enter(GameState::InGame).with_system(setup_game))
         .add_system_set(
             SystemSet::on_update(GameState::InGame)
-                .with_system(sprite_animation)
+                .with_system(sprite_animation_system)
                 .with_system(sync_mouse_position)
                 .with_system(move_player_to_mouse)
                 .with_system(update_player_animation),
@@ -46,74 +49,93 @@ struct ResourceHandles {
 struct MainCamera;
 
 #[derive(Component)]
+struct MousePosition(Vec2);
+
+#[derive(Component)]
 struct Court {
-    surface: Surface,
+    _surface: Surface,
 }
 
 enum Surface {
-    AcrylicBlue,
-    AcrylicGreen,
-    Clay,
     Grass,
-    Concrete,
 }
 
+#[derive(Component)]
 struct Player;
-
-enum Facing {
-    Left,
-    Right,
-}
 
 #[derive(Component)]
 enum PlayerAnimationState {
     Idle,
-    Run,
 }
 
 #[derive(Component)]
-struct SpriteAnimation {
-    atlas_indices: Vec<usize>,
-    durations: Vec<Duration>,
-    timer: Timer,
+struct SpriteAnimation(Vec<SpriteAnimationFrame>);
+
+#[derive(Clone, Copy)]
+struct SpriteAnimationFrame {
+    sprite_index: usize,
+    duration: Duration,
+    flipped: bool,
 }
 
-impl SpriteAnimation {
-    fn player_idle_north() -> Self {
-        let durations = [0.5; 4].map(Duration::from_secs_f32).to_vec();
+#[derive(Bundle)]
+struct SpriteAnimationBundle {
+    frames: SpriteAnimation,
+    timer: SpriteAnimationTimer,
+}
+
+impl SpriteAnimationBundle {
+    fn from_frames(frames: SpriteAnimation, repeating: bool) -> Self {
         Self {
-            atlas_indices: [16, 17, 18, 19].into(),
-            timer: Timer::new(durations.iter().sum(), true),
-            durations,
+            timer: SpriteAnimationTimer(Timer::new(frames.duration(), repeating)),
+            frames,
         }
     }
+}
 
-    fn player_run_north() -> Self {
-        let durations = [0.2; 4].map(Duration::from_secs_f32).to_vec();
-        Self {
-            atlas_indices: [8, 9, 10, 11].into(),
-            timer: Timer::new(durations.iter().sum(), true),
-            durations,
-        }
+#[derive(Component)]
+struct SpriteAnimationTimer(Timer);
+
+impl SpriteAnimation {
+    fn player_idle_south() -> Self {
+        let frames = [(12, 0.3), (13, 0.1), (14, 0.2), (15, 0.1)]
+            .map(|(i, dt)| SpriteAnimationFrame {
+                sprite_index: i,
+                duration: Duration::from_secs_f32(dt),
+                flipped: false,
+            })
+            .to_vec();
+        Self(frames)
+    }
+
+    fn duration(&self) -> Duration {
+        self.0.iter().map(|frame| frame.duration).sum()
     }
 }
 
 // ====== Systems ======
 
-fn sprite_animation(
+fn sprite_animation_system(
     time: Res<Time>,
-    mut query: Query<(&mut TextureAtlasSprite, &mut SpriteAnimation)>,
+    mut query: Query<(
+        &mut TextureAtlasSprite,
+        &SpriteAnimation,
+        &mut SpriteAnimationTimer,
+    )>,
 ) {
-    for (mut sprite, mut animation) in query.iter_mut() {
-        animation.timer.tick(time.delta());
+    for (mut sprite, animation, mut timer) in query.iter_mut() {
+        timer.0.tick(time.delta());
         let mut sum = Duration::ZERO;
-        for (&i, &duration) in animation.atlas_indices.iter().zip(&animation.durations) {
-            sum += duration;
-            if sum >= animation.timer.elapsed() {
-                sprite.index = i;
-                break;
-            }
-        }
+        let (index, flipped) = animation
+            .0
+            .iter()
+            .find_map(|frame| {
+                sum += frame.duration;
+                (timer.0.elapsed() <= sum).then_some((frame.sprite_index, frame.flipped))
+            })
+            .expect("overextended animation timer");
+        sprite.index = index;
+        sprite.flip_x = flipped;
     }
 }
 
@@ -145,21 +167,41 @@ fn setup_game(
 
     let scale = Transform::from_scale(Vec3::splat(3.0));
 
-    let texture_handle = asset_server.get_handle("textures/player_ashe_white.png");
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(24.0, 24.0), 8, 5);
+    let texture_handle = asset_server.get_handle("textures/player_male_light_white.png");
+    let texture_atlas = TextureAtlas::from_grid_with_padding(
+        texture_handle,
+        Vec2::new(23.0, 23.0),
+        8,
+        5,
+        Vec2::new(1.0, 1.0),
+    );
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
     commands
-        .spawn_bundle(SpriteSheetBundle {
-            sprite: TextureAtlasSprite {
-                ..Default::default()
-            },
-            texture_atlas: texture_atlas_handle,
-            transform: scale.with_translation(Vec3::new(0.0, 0.0, 1.0)),
-            ..Default::default()
-        })
-        .insert(PlayerAnimationState::Run)
-        .insert(SpriteAnimation::player_run_north());
+        .spawn()
+        .insert(Player)
+        .insert_bundle((
+            Transform::from_translation(Vec3::new(0.0, 0.0, 2.0)),
+            GlobalTransform::default(),
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn()
+                .insert_bundle(SpriteSheetBundle {
+                    sprite: TextureAtlasSprite {
+                        ..Default::default()
+                    },
+                    texture_atlas: texture_atlas_handle,
+                    transform: Transform::from_translation(Vec3::new(0.0, 30.0, 0.0))
+                        .with_scale(Vec3::splat(3.0)),
+                    ..Default::default()
+                })
+                .insert_bundle(SpriteAnimationBundle::from_frames(
+                    SpriteAnimation::player_idle_south(),
+                    true,
+                ))
+                .insert(PlayerAnimationState::Idle);
+        });
 
     commands
         .spawn_bundle(SpriteBundle {
@@ -168,14 +210,11 @@ fn setup_game(
             ..Default::default()
         })
         .insert(Court {
-            surface: Surface::Grass,
+            _surface: Surface::Grass,
         });
 
     commands.spawn().insert(MousePosition(Vec2::ZERO));
 }
-
-#[derive(Component)]
-struct MousePosition(Vec2);
 
 fn sync_mouse_position(
     // need to get window dimensions
@@ -184,18 +223,13 @@ fn sync_mouse_position(
     q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut q_mouse: Query<&mut MousePosition>,
 ) {
-    // get the camera info and transform
-    // assuming there is exactly one main camera entity, so query::single() is OK
     let (camera, camera_transform) = q_camera.single();
-
     let mut mouse_pos = q_mouse.single_mut();
 
     // get the window that the camera is displaying to
     let wnd = wnds.get(camera.window).unwrap();
 
-    // check if the cursor is inside the window and get its position
     if let Some(screen_pos) = wnd.cursor_position() {
-        // get the size of the window
         let window_size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
 
         // convert screen position [0..resolution] to ndc [-1..1] (gpu coordinates)
@@ -203,10 +237,8 @@ fn sync_mouse_position(
 
         // matrix for undoing the projection and camera transform
         let ndc_to_world = camera_transform.compute_matrix() * camera.projection_matrix.inverse();
-
         // use it to convert ndc to world-space coordinates
         let world_pos = ndc_to_world.project_point3(ndc.extend(-1.0));
-
         // reduce it to a 2D value
         let world_pos: Vec2 = world_pos.truncate();
 
@@ -219,27 +251,24 @@ fn update_player_animation(
 ) {
     for (mut anim, anim_state) in query.iter_mut() {
         *anim = match anim_state {
-            PlayerAnimationState::Idle => SpriteAnimation::player_idle_north(),
-            PlayerAnimationState::Run => SpriteAnimation::player_run_north(),
+            PlayerAnimationState::Idle => SpriteAnimation::player_idle_south(),
         };
     }
 }
 
 fn move_player_to_mouse(
-    mut player_query: Query<(&mut Transform, &mut PlayerAnimationState)>,
+    time: Res<Time>,
+    mut player_query: Query<&mut Transform, With<Player>>,
     mouse_query: Query<&MousePosition>,
 ) {
     if let Ok(mouse_pos) = mouse_query.get_single() {
-        for (mut transform, mut anim_state) in player_query.iter_mut() {
-            let speed = 0.05;
-            if (transform.translation.truncate() - mouse_pos.0).length() > 1.0 {
-                transform.translation =
-                    speed * mouse_pos.0.extend(1.0) + (1.0 - speed) * transform.translation;
-                if !matches!(*anim_state, PlayerAnimationState::Run) {
-                    *anim_state = PlayerAnimationState::Run;
-                }
-            } else if !matches!(*anim_state, PlayerAnimationState::Idle) {
-                *anim_state = PlayerAnimationState::Idle;
+        for mut transform in player_query.iter_mut() {
+            let delta = mouse_pos.0 - transform.translation.truncate();
+            let max_distance = time.delta_seconds() * (delta.length().min(100.0)) * 4.0;
+            if delta.length() <= max_distance {
+                transform.translation = mouse_pos.0.extend(transform.translation.z);
+            } else {
+                transform.translation += max_distance * delta.normalize().extend(0.0);
             }
         }
     }
