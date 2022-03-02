@@ -27,6 +27,7 @@ fn main() {
             height: BG_HEIGHT * PX_SCALE,
             resizable: false,
             decorations: false,
+            cursor_visible: false,
             vsync: true,
             ..Default::default()
         })

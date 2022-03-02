@@ -18,8 +18,9 @@ impl Plugin for InputPlugin {
     }
 }
 
+// A resource to store the cursor's current screen position.
 #[derive(Default)]
-pub(crate) struct MousePosition(Option<Vec2>);
+pub(crate) struct MousePosition(pub(crate) Option<Vec2>);
 
 #[derive(Component)]
 pub(crate) struct MainCamera;
@@ -53,7 +54,6 @@ fn sync_mouse_position_2d(
         let screen_pos = windows.get(camera.window)?.cursor_position()?;
         let ndc = (screen_pos / window_size) * 2.0 - Vec2::ONE;
         let ndc_to_world = camera_transform.compute_matrix() * camera.projection_matrix.inverse();
-        let world_pos: Vec2 = ndc_to_world.project_point3(ndc.extend(-1.0)).truncate();
-        world_pos
+        ndc_to_world.project_point3(ndc.extend(-1.0)).truncate()
     };
 }
