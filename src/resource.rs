@@ -1,32 +1,51 @@
-use crate::GameState;
-use bevy::prelude::*;
+use crate::*;
 
 pub(crate) struct ResourcePlugin;
 
 impl Plugin for ResourcePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ResourceHandles>()
-            .add_system_set(SystemSet::on_enter(GameState::Loading).with_system(load_resources))
-            .add_system_set(SystemSet::on_update(GameState::Loading).with_system(check_resources));
+            .add_system_set(
+                SystemSet::on_enter(GameState::Loading)
+                    .with_system(begin_resource_loading)
+                    .with_system(setup),
+            )
+            .add_system_set(
+                SystemSet::on_update(GameState::Loading).with_system(check_resource_loading),
+            );
     }
 }
 
-#[derive(Default)]
-struct ResourceHandles(Vec<HandleUntyped>);
+fn setup(mut commands: Commands, mut rapier_config: ResMut<RapierConfiguration>) {
+    commands
+        .spawn_bundle(OrthographicCameraBundle::new_2d())
+        .insert(MainCamera);
+    commands
+        .spawn_bundle(UiCameraBundle::default())
+        .insert(UiCamera);
+    rapier_config.gravity = Vec3::new(0.0, 0.0, -10.0).into();
+}
 
-fn load_resources(mut texture_handles: ResMut<ResourceHandles>, asset_server: Res<AssetServer>) {
-    texture_handles.0.extend(
-        [
+fn begin_resource_loading(
+    mut texture_handles: ResMut<ResourceHandles>,
+    asset_server: Res<AssetServer>,
+) {
+    let fonts = ["fonts/Press_Start_2P/PressStart2P-Regular.ttf"];
+    let textures = [
         "ball.png",
         "player_female_dark_blue.png",
         "player_male_light_white.png",
         "court_grass.png",
-        ]
-        .map(|filename| asset_server.load_untyped(filename)),
+    ];
+    texture_handles.0.extend(
+        std::iter::empty()
+            .chain(fonts)
+            .chain(textures)
+            .map(|filename| asset_server.load_untyped(filename)),
     );
 }
 
-fn check_resources(
+fn check_resource_loading(
     mut state: ResMut<State<GameState>>,
     resource_handles: ResMut<ResourceHandles>,
     asset_server: Res<AssetServer>,
