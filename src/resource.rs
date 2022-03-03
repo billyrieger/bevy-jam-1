@@ -31,12 +31,7 @@ fn begin_resource_loading(
     asset_server: Res<AssetServer>,
 ) {
     let fonts = ["fonts/Press_Start_2P/PressStart2P-Regular.ttf"];
-    let textures = [
-        "ball.png",
-        "player_female_dark_blue.png",
-        "player_male_light_white.png",
-        "court_grass.png",
-    ];
+    let textures = ["textures/ball.png", "player.png", "court_grass.png"];
     texture_handles.0.extend(
         std::iter::empty()
             .chain(fonts)

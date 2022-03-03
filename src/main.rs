@@ -14,8 +14,9 @@ const PX_SCALE: f32 = 2.0;
 mod animation;
 mod game;
 mod input;
-mod spawn;
 mod resource;
+mod setup;
+mod spawn;
 mod world;
 
 const WORLD_SCALE: f32 = 10.0;
@@ -38,7 +39,7 @@ struct MousePosition(Option<Vec2>);
 
 // ====== Events ======
 
-struct PrimaryButtonPress;
+struct PrimaryKeyPress;
 
 struct MovePlayerEvent {
     direction: Vec3,
@@ -63,6 +64,21 @@ struct SpawnPlayerEvent {
 struct WorldPosition(Vec3);
 
 #[derive(Component)]
+struct WorldSprite {
+    base: Vec2,
+    custom_scale: f32,
+}
+
+impl Default for WorldSprite {
+    fn default() -> Self {
+        Self {
+            base: Vec2::ZERO,
+            custom_scale: 1.0,
+        }
+    }
+}
+
+#[derive(Component)]
 struct SyncWorldPosition;
 
 #[derive(Component)]
@@ -71,10 +87,19 @@ struct MainCamera;
 #[derive(Component)]
 struct UiCamera;
 
+#[derive(Component)]
+struct Shadow {
+    parent: Entity,
+}
+
 // Player components
 
-#[derive(Component)]
-struct Player;
+#[derive(Component, Clone)]
+enum PlayerState {
+    Idle,
+    Run,
+    Swing,
+}
 
 #[derive(Component)]
 struct UserControlled;
@@ -95,10 +120,7 @@ struct GrassSurface;
 #[derive(Component)]
 struct TennisBall;
 
-#[derive(Component)]
-struct TennisBallShadow;
-
-// Animation components
+// ====== Components ======
 
 #[derive(Component)]
 struct SpriteAnimation {
@@ -111,8 +133,42 @@ struct SpriteAnimationFrame {
     duration: Duration,
 }
 
-#[derive(Component)]
-struct InvertControls;
+#[derive(Component, Clone)]
+struct NextPlayerState(PlayerState);
+
+impl SpriteAnimation {
+    fn new<const N: usize>(indices: [usize; N], durations: [f32; N], repeating: bool) -> Self {
+        let frames = indices
+            .into_iter()
+            .zip(durations)
+            .map(|(index, duration)| SpriteAnimationFrame {
+                sprite_index: index,
+                duration: Duration::from_secs_f32(duration),
+            })
+            .collect();
+        Self {
+            frames,
+            timer: Timer::from_seconds(durations.iter().sum(), repeating),
+        }
+    }
+
+    fn player_serve() -> Self {
+        Self::new([0, 1, 2, 3], [1.0, 0.3, 0.2, 0.2], false)
+    }
+
+    fn player_idle() -> Self {
+        Self::new([4, 5, 6, 7], [0.3, 0.1, 0.2, 0.1], true)
+    }
+
+    fn player_run() -> Self {
+        // The spritesheet frames are off by one for this animation.
+        Self::new([9, 10, 11, 8], [0.2, 0.2, 0.2, 0.2], true)
+    }
+
+    fn player_swing() -> Self {
+        Self::new([12, 13, 14], [0.3, 0.3, 0.3], false)
+    }
+}
 
 fn main() {
     App::new()

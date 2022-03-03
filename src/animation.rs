@@ -4,11 +4,16 @@ pub(crate) struct AnimationPlugin;
 
 impl Plugin for AnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(SystemSet::on_update(GameState::InGame).with_system(sprite_animation));
+        app.add_system_set(
+            SystemSet::on_update(GameState::InGame)
+                .with_system(advance_animations)
+                .with_system(update_current_player_animation)
+                .with_system(change_player_state),
+        );
     }
 }
 
-fn sprite_animation(
+fn advance_animations(
     time: Res<Time>,
     mut query: Query<(&mut SpriteAnimation, &mut TextureAtlasSprite)>,
 ) {
@@ -22,28 +27,36 @@ fn sprite_animation(
                 sum += frame.duration;
                 sum >= animation.timer.elapsed()
             })
-            .expect("overextended animation timer")
-            .sprite_index;
+            .map(|frame| frame.sprite_index)
+            .unwrap_or(0);
     }
 }
 
-impl SpriteAnimation {
-    fn new<const N: usize>(indices: [usize; N], durations: [f32; N]) -> Self {
-        let frames = indices
-            .into_iter()
-            .zip(durations)
-            .map(|(index, duration)| SpriteAnimationFrame {
-                sprite_index: index,
-                duration: Duration::from_secs_f32(duration),
-            })
-            .collect();
-        Self {
-            frames,
-            timer: Timer::from_seconds(durations.iter().sum(), true),
+fn update_current_player_animation(
+    mut player_query: Query<(&mut SpriteAnimation, &PlayerState), Changed<PlayerState>>,
+) {
+    for (mut animation, player_state) in player_query.iter_mut() {
+        *animation = match player_state{
+            PlayerState::Idle => SpriteAnimation::player_idle(),
+            PlayerState::Run => SpriteAnimation::player_run(),
+            PlayerState::Swing => SpriteAnimation::player_swing(),
         }
     }
+}
 
-    pub(crate) fn player_idle() -> Self {
-        Self::new([16, 17, 18, 19], [0.3, 0.1, 0.2, 0.1])
+fn change_player_state(
+    mut commands: Commands,
+    mut player_query: Query<(Entity, &mut PlayerState, &mut SpriteAnimation, &NextPlayerState)>,
+) {
+    for (entity, mut player_state, mut animation, next_state) in player_query.iter_mut() {
+        if animation.timer.just_finished() && !animation.timer.repeating() {
+            *player_state = next_state.0.clone();
+            *animation = match *player_state {
+                PlayerState::Idle => SpriteAnimation::player_idle(),
+                PlayerState::Run => SpriteAnimation::player_run(),
+                PlayerState::Swing => SpriteAnimation::player_swing(),
+            };
+            commands.entity(entity).remove::<NextPlayerState>();
+        }
     }
 }
