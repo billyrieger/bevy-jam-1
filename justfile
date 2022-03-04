@@ -1,4 +1,4 @@
-title := "Bevy Sports: Tennis Coliseum"
+title := "Bevy Sports: Unfair Tennis"
 crate := "bevy-unfair-tennis"
 web-target := "wasm32-unknown-unknown"
 web-dir := "dist"

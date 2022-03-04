@@ -1,4 +1,3 @@
-#![feature(bool_to_option)]
 #![feature(try_blocks)]
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
@@ -7,24 +6,41 @@ use bevy_easings::*;
 use bevy_rapier3d::prelude::*;
 use std::time::Duration;
 
-const BG_WIDTH: f32 = 272.0;
-const BG_HEIGHT: f32 = 256.0;
-const PX_SCALE: f32 = 2.0;
-
-mod animation;
 mod game;
-mod input;
-mod resource;
 mod setup;
-mod spawn;
-mod world;
 
-const WORLD_SCALE: f32 = 10.0;
+const KEY_CODE_UP: KeyCode = KeyCode::Up;
+const KEY_CODE_DOWN: KeyCode = KeyCode::Down;
+const KEY_CODE_LEFT: KeyCode = KeyCode::Left;
+const KEY_CODE_RIGHT: KeyCode = KeyCode::Right;
+const KEY_CODE_ACTION: KeyCode = KeyCode::Space;
+
+const PLAYER_SPEED: f32 = 0.25;
+const PLAYER_CHARGING_SPEED_FACTOR: f32 = 0.4;
+const PLAYER_SWING_COOLDOWN_SECS: f32 = 0.5;
+
+const BG_WIDTH: f32 = 272.;
+const BG_HEIGHT: f32 = 256.;
+const PX_SCALE: f32 = 2.;
+const WORLD_SCALE: f32 = 10.;
+
+fn default<T: Default>() -> T {
+    Default::default()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(SystemLabel)]
+enum SystemOrder {
+    First,
+    Input,
+    Main,
+    Last,
+}
 
 // ====== State ======
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum GameState {
+enum AppState {
     Loading,
     InGame,
 }
@@ -47,7 +63,7 @@ struct MovePlayerEvent {
 
 #[derive(Default)]
 struct SpawnTennisBall {
-    position: RigidBodyPosition,
+    position: WorldPosition,
     velocity: RigidBodyVelocity,
 }
 
@@ -55,10 +71,12 @@ struct SpawnCourtEvent;
 
 struct SpawnPlayerEvent {
     position: WorldPosition,
-    invert_controls: bool,
 }
 
 // ====== Components ======
+
+#[derive(Component)]
+struct DebugDot(Color);
 
 #[derive(Component, Clone, Copy, Debug, Default)]
 struct WorldPosition(Vec3);
@@ -66,15 +84,11 @@ struct WorldPosition(Vec3);
 #[derive(Component)]
 struct WorldSprite {
     base: Vec2,
-    custom_scale: f32,
 }
 
 impl Default for WorldSprite {
     fn default() -> Self {
-        Self {
-            base: Vec2::ZERO,
-            custom_scale: 1.0,
-        }
+        Self { base: Vec2::ZERO }
     }
 }
 
@@ -91,21 +105,6 @@ struct UiCamera;
 struct Shadow {
     parent: Entity,
 }
-
-// Player components
-
-#[derive(Component, Clone)]
-enum PlayerState {
-    Idle,
-    Run,
-    Swing,
-}
-
-#[derive(Component)]
-struct UserControlled;
-
-#[derive(Component)]
-struct CpuControlled;
 
 // Court components
 
@@ -133,42 +132,36 @@ struct SpriteAnimationFrame {
     duration: Duration,
 }
 
+// ====== Player components ======
+
 #[derive(Component, Clone)]
-struct NextPlayerState(PlayerState);
-
-impl SpriteAnimation {
-    fn new<const N: usize>(indices: [usize; N], durations: [f32; N], repeating: bool) -> Self {
-        let frames = indices
-            .into_iter()
-            .zip(durations)
-            .map(|(index, duration)| SpriteAnimationFrame {
-                sprite_index: index,
-                duration: Duration::from_secs_f32(duration),
-            })
-            .collect();
-        Self {
-            frames,
-            timer: Timer::from_seconds(durations.iter().sum(), repeating),
-        }
-    }
-
-    fn player_serve() -> Self {
-        Self::new([0, 1, 2, 3], [1.0, 0.3, 0.2, 0.2], false)
-    }
-
-    fn player_idle() -> Self {
-        Self::new([4, 5, 6, 7], [0.3, 0.1, 0.2, 0.1], true)
-    }
-
-    fn player_run() -> Self {
-        // The spritesheet frames are off by one for this animation.
-        Self::new([9, 10, 11, 8], [0.2, 0.2, 0.2, 0.2], true)
-    }
-
-    fn player_swing() -> Self {
-        Self::new([12, 13, 14], [0.3, 0.3, 0.3], false)
-    }
+enum PlayerState {
+    Idle,
+    Run,
+    Charge,
+    Swing,
 }
+
+#[derive(Component)]
+struct PlayerSpeed(f32);
+
+#[derive(Component)]
+struct PlayerDirection(Vec3);
+
+#[derive(Component)]
+enum PlayerFacing {
+    Right,
+    Left,
+}
+
+#[derive(Component)]
+struct SwingCooldown(Timer);
+
+#[derive(Component)]
+struct UserControlled;
+
+#[derive(Component)]
+struct CpuControlled;
 
 fn main() {
     App::new()
@@ -176,21 +169,55 @@ fn main() {
             width: BG_WIDTH * PX_SCALE,
             height: BG_HEIGHT * PX_SCALE,
             resizable: false,
-            cursor_visible: false,
             vsync: true,
             ..Default::default()
         })
-        .add_plugins(DefaultPlugins)
-        // .add_plugin(FrameTimeDiagnosticsPlugin::default())
-        .add_plugin(LogDiagnosticsPlugin::default())
-        .add_plugin(EasingsPlugin)
-        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugin(resource::ResourcePlugin)
-        .add_plugin(input::InputPlugin)
+        .add_plugin(setup::SetupPlugin)
         .add_plugin(game::GamePlugin)
-        .add_plugin(world::WorldPlugin)
-        .add_plugin(spawn::SpawnPlugin)
-        .add_plugin(animation::AnimationPlugin)
-        .add_state(GameState::Loading)
+        .add_state(AppState::Loading)
         .run();
+}
+
+
+fn spawn_debug_dot(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    texture_atlases: &mut Assets<TextureAtlas>,
+    pos: WorldPosition,
+) {
+    let texture_handle = asset_server.get_handle("textures/ball.png");
+    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(8.0, 8.0), 1, 7);
+    let texture_atlas_handle = texture_atlases.add(texture_atlas);
+    let dot_id = commands
+        .spawn_bundle((
+            pos,
+            SyncWorldPosition,
+            DebugDot(Color::RED),
+            UserControlled,
+        ))
+        .insert(WorldSprite::default())
+        .insert_bundle(SpriteSheetBundle {
+            sprite: TextureAtlasSprite {
+                index: 6,
+                ..default()
+            },
+            texture_atlas: texture_atlas_handle.clone(),
+            ..default()
+        })
+        .id();
+    commands
+        .spawn_bundle((
+            Shadow { parent: dot_id },
+            WorldPosition::default(),
+            SyncWorldPosition,
+        ))
+        .insert(WorldSprite::default())
+        .insert_bundle(SpriteSheetBundle {
+            sprite: TextureAtlasSprite {
+                index: 5,
+                ..default()
+            },
+            texture_atlas: texture_atlas_handle.clone(),
+            ..default()
+        });
 }
