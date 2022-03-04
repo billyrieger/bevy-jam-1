@@ -1,8 +1,5 @@
 use crate::*;
 
-use super::world::WorldPlugin;
-use super::SystemOrder;
-
 pub(crate) struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -27,15 +24,24 @@ impl Plugin for PlayerPlugin {
 }
 
 fn update_animation_system(
-    mut query: Query<(&PlayerState, &mut SpriteAnimation), Changed<PlayerState>>,
+    mut query: Query<(&PlayerState, &mut SpriteAnimation, Option<&Opponent>), Changed<PlayerState>>,
 ) {
-    for (state, mut animation) in query.iter_mut() {
-        *animation = match state {
-            PlayerState::Idle => SpriteAnimation::player_idle(),
-            PlayerState::Run => SpriteAnimation::player_run(),
-            PlayerState::Charge => SpriteAnimation::player_charge(),
-            PlayerState::Swing => SpriteAnimation::player_swing(),
-        };
+    for (state, mut animation, opponent) in query.iter_mut() {
+        *animation = if opponent.is_none() {
+            match state {
+                PlayerState::Idle => SpriteAnimation::player_idle(),
+                PlayerState::Run => SpriteAnimation::player_run(),
+                PlayerState::Charge => SpriteAnimation::player_charge(),
+                PlayerState::Swing => SpriteAnimation::player_swing(),
+            }
+        } else {
+            match state {
+                PlayerState::Idle => SpriteAnimation::opponent_idle(),
+                PlayerState::Run => SpriteAnimation::opponent_run(),
+                PlayerState::Charge => SpriteAnimation::opponent_charge(),
+                PlayerState::Swing => SpriteAnimation::opponent_swing(),
+            }
+        }
     }
 }
 
@@ -99,21 +105,22 @@ fn begin_charge_system(
 
 fn release_charge_system(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     keyboard: Res<Input<KeyCode>>,
-    mut player_query: Query<(Entity, &mut PlayerState, &WorldPosition), With<UserControlled>>,
+    mut player_query: Query<
+        (Entity, &mut PlayerState, &PlayerFacing, &WorldPosition),
+        With<UserControlled>,
+    >,
     mut ball_query: Query<
         (
             &WorldPosition,
             &mut RigidBodyPositionComponent,
             &mut RigidBodyVelocityComponent,
         ),
-        With<TennisBall>,
+        With<GameBall>,
     >,
 ) {
     if keyboard.just_released(KEY_CODE_ACTION) {
-        for (entity, mut player_state, player_position) in player_query.iter_mut() {
+        for (entity, mut player_state, player_facing, player_position) in player_query.iter_mut() {
             if matches!(*player_state, PlayerState::Charge) {
                 *player_state = PlayerState::Swing;
                 commands
@@ -122,10 +129,18 @@ fn release_charge_system(
                         PLAYER_SWING_COOLDOWN_SECS,
                         false,
                     )));
-                let sweet_spot = player_position.0 + Vec3::new(9.0, 0.0, 11.0) * PX_SCALE / WORLD_SCALE;
-                spawn_debug_dot(&mut commands, &asset_server, &mut texture_atlases, WorldPosition(sweet_spot));
-                for (ball_pos, phys_pos, phys_vel) in ball_query.iter_mut() {
-
+                let flip = if matches!(player_facing, PlayerFacing::Left) {
+                    -1.0
+                } else {
+                    1.0
+                };
+                let sweet_spot =
+                    player_position.0 + Vec3::new(9.0 * flip, 0.0, 11.0) * PX_SCALE / WORLD_SCALE;
+                for (ball_pos, phys_pos, mut phys_vel) in ball_query.iter_mut() {
+                    let dist_to_ball = (sweet_spot - ball_pos.0).length();
+                    phys_vel.linvel = Vec3::new(0.0, 20.0, 10.0).into();
+                    phys_vel.angvel = Vec3::new(10.0, 0.0, 0.0).into();
+                    info!("{dist_to_ball:?}");
                 }
             }
         }
@@ -156,7 +171,7 @@ fn flip_sprite_facing_system(mut query: Query<(&PlayerFacing, &mut TextureAtlasS
 
 fn turn_player_toward_ball(
     mut player_query: Query<(&mut PlayerFacing, &PlayerState, &WorldPosition)>,
-    ball_query: Query<&WorldPosition, With<TennisBall>>,
+    ball_query: Query<&WorldPosition, With<GameBall>>,
 ) {
     for (mut player_facing, player_state, player_pos) in player_query.iter_mut() {
         if matches!(*player_state, PlayerState::Idle | PlayerState::Run) {
@@ -177,60 +192,48 @@ fn player_spawn_system(
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     mut events: EventReader<SpawnPlayerEvent>,
 ) {
-    for ev in events.iter() {
-        spawn_player(&mut commands, &asset_server, &mut texture_atlases, ev);
-    }
-}
-
-fn spawn_player(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    texture_atlases: &mut Assets<TextureAtlas>,
-    event: &SpawnPlayerEvent,
-) -> Entity {
     let texture_handle = asset_server.get_handle("textures/player.png");
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(24.0, 24.0), 4, 8);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
-    let id = commands
-        .spawn_bundle((
-            PlayerState::Idle,
-            PlayerSpeed(PLAYER_SPEED),
-            PlayerFacing::Right,
-        ))
-        .insert(UserControlled)
-        .insert_bundle((
-            event.position,
-            SyncWorldPosition,
-            WorldSprite {
-                base: Vec2::new(0.0, -10.5) * PX_SCALE,
+    for ev in events.iter() {
+        let id = commands
+            .spawn_bundle((
+                PlayerState::Idle,
+                PlayerSpeed(PLAYER_SPEED),
+                PlayerFacing::Right,
+            ))
+            .insert_bundle((
+                ev.position,
+                SyncWorldPosition,
+                WorldSprite {
+                    base: Vec2::new(0.0, -10.5) * PX_SCALE,
+                    ..Default::default()
+                },
+            ))
+            .insert_bundle(SpriteSheetBundle {
+                texture_atlas: texture_atlas_handle.clone(),
+                transform: Transform::from_scale(Vec3::splat(PX_SCALE)),
                 ..Default::default()
-            },
-        ))
-        .insert_bundle(SpriteSheetBundle {
-            texture_atlas: texture_atlas_handle.clone(),
-            transform: Transform::from_scale(Vec3::splat(PX_SCALE)),
-            ..Default::default()
-        })
-        .insert(SpriteAnimation::player_idle())
-        .id();
-    commands
-        .spawn_bundle((
-            Shadow { parent: id },
-            WorldPosition(Vec3::new(event.position.0.x, 0., event.position.0.z)),
-            WorldSprite {
-                base: Vec2::new(0.0, -10.5) * PX_SCALE,
+            })
+            .insert(SpriteAnimation::player_idle())
+            .id();
+        commands
+            .spawn_bundle((
+                Shadow { parent: id },
+                WorldPosition::default(),
+                WorldSprite {
+                    base: Vec2::new(0.0, -10.5) * PX_SCALE,
+                },
+                SyncWorldPosition,
+            ))
+            .insert_bundle(SpriteSheetBundle {
+                sprite: TextureAtlasSprite {
+                    index: 15,
+                    ..default()
+                },
+                texture_atlas: texture_atlas_handle.clone(),
                 ..default()
-            },
-            SyncWorldPosition,
-        ))
-        .insert_bundle(SpriteSheetBundle {
-            sprite: TextureAtlasSprite {
-                index: 15,
-                ..default()
-            },
-            texture_atlas: texture_atlas_handle.clone(),
-            ..default()
-        });
-    id
+            });
+    }
 }

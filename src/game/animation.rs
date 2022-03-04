@@ -48,6 +48,23 @@ impl SpriteAnimation {
     pub(crate) fn player_swing() -> Self {
         Self::new([13, 14], [0.05, 0.2], false)
     }
+
+    pub(crate) fn opponent_idle() -> Self {
+        Self::new([20, 21, 22, 23], [0.3, 0.1, 0.2, 0.1], true)
+    }
+
+    pub(crate) fn opponent_run() -> Self {
+        // The spritesheet frames are off by one for this animation.
+        Self::new([25, 26, 27, 24], [0.2, 0.2, 0.2, 0.2], true)
+    }
+
+    pub(crate) fn opponent_charge() -> Self {
+        Self::new([28], [0.1], true)
+    }
+
+    pub(crate) fn opponent_swing() -> Self {
+        Self::new([29, 30], [0.05, 0.2], false)
+    }
 }
 
 fn advance_animations(

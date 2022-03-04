@@ -22,15 +22,24 @@ fn sync_physics_coords(mut query: Query<(&mut WorldPosition, &RigidBodyPositionC
 }
 
 fn sync_transforms(
-    mut query: Query<(&mut Transform, &WorldPosition, &WorldSprite), With<SyncWorldPosition>>,
+    mut query: Query<
+        (
+            &mut Transform,
+            &WorldPosition,
+            &WorldSprite,
+            Option<&CustomScale>,
+        ),
+        With<SyncWorldPosition>,
+    >,
 ) {
-    for (mut transform, world_coords, world_sprite) in query.iter_mut() {
+    for (mut transform, world_coords, world_sprite, maybe_scale) in query.iter_mut() {
+        let custom_scale = maybe_scale.unwrap_or(&CustomScale(1.0)).0;
         let depth_scale = 1.0 - DEPTH_SCALE * world_coords.0.y;
         let scaled = world_coords.0 * WORLD_SCALE * depth_scale;
         transform.translation =
             (Vec2::new(scaled.x, scaled.y + scaled.z) - world_sprite.base).extend(depth_scale);
         // transform.scale = Vec3::splat(PX_SCALE * depth_scale * world_sprite.custom_scale);
-        transform.scale = Vec3::splat(PX_SCALE * depth_scale);
+        transform.scale = Vec3::splat(PX_SCALE * depth_scale * custom_scale);
     }
 }
 
