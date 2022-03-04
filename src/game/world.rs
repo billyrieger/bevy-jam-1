@@ -27,31 +27,32 @@ fn sync_transforms(
             &mut Transform,
             &WorldPosition,
             &WorldSprite,
-            Option<&CustomScale>,
+            Option<&Shadow>,
         ),
         With<SyncWorldPosition>,
     >,
 ) {
     for (mut transform, world_coords, world_sprite, maybe_scale) in query.iter_mut() {
-        let custom_scale = maybe_scale.unwrap_or(&CustomScale(1.0)).0;
+        let shadow_scale = maybe_scale.map(|shadow| shadow.scale).unwrap_or(1.0);
         let depth_scale = 1.0 - DEPTH_SCALE * world_coords.0.y;
         let scaled = world_coords.0 * WORLD_SCALE * depth_scale;
         transform.translation =
             (Vec2::new(scaled.x, scaled.y + scaled.z) - world_sprite.base).extend(depth_scale);
         // transform.scale = Vec3::splat(PX_SCALE * depth_scale * world_sprite.custom_scale);
-        transform.scale = Vec3::splat(PX_SCALE * depth_scale * custom_scale);
+        transform.scale = Vec3::splat(PX_SCALE * depth_scale * shadow_scale);
     }
 }
 
 fn sync_shadow_position_system(
-    mut shadow_query: Query<(&Shadow, &mut WorldPosition, &mut WorldSprite)>,
+    mut shadow_query: Query<(&mut Shadow, &mut WorldPosition, &mut WorldSprite)>,
     parent_query: Query<&WorldPosition, Without<Shadow>>,
 ) {
-    for (shadow, mut shadow_position, mut sprite) in shadow_query.iter_mut() {
-        let parent_position = parent_query.get(shadow.parent).expect("parent not found");
-        *shadow_position = *parent_position;
-        shadow_position.0.y += 0.01;
-        shadow_position.0.z = 0.;
-        // sprite.custom_scale = 1.0 - parent_position.0.z * DEPTH_SCALE;
+    for (mut shadow, mut shadow_position, mut sprite) in shadow_query.iter_mut() {
+        if let Ok(parent_position) = parent_query.get(shadow.parent) {
+            *shadow_position = *parent_position;
+            shadow_position.0.y += 0.01;
+            shadow_position.0.z = 0.;
+            shadow.scale = 1.0 - parent_position.0.z * 0.03;
+        }
     }
 }

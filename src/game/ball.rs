@@ -4,71 +4,98 @@ pub(crate) struct BallPlugin;
 
 impl Plugin for BallPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(SystemSet::on_update(AppState::InGame).with_system(ball_spawner));
+        app.add_system_set(
+            SystemSet::on_update(AppState::InGame)
+                .with_system(ball_spawner)
+                .with_system(hit_ball_system),
+        );
+    }
+}
+
+fn hit_ball_system(
+    mut bounces: ResMut<BallBouncesSinceHit>,
+    mut events: EventReader<HitEvent>,
+    mut ball_query: Query<&mut RigidBodyVelocityComponent, With<GameBall>>,
+) {
+    for ev in events.iter() {
+        bounces.0 = 0;
+        info!("bounces reset");
+        let mut ball_velocity = ball_query.get_mut(ev.ball_id).expect("ball not found");
+        *ball_velocity = RigidBodyVelocity {
+            linvel: ev.new_velocity.into(),
+            ..default()
+        }
+        .into();
     }
 }
 
 fn ball_spawner(
     mut commands: Commands,
-    game_assets: Res<GameAssets>,
+    asset_server: Res<AssetServer>,
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     mut events: EventReader<SpawnBallEvent>,
 ) {
-    for ev in events.iter() {
-        spawn_ball(&mut commands, &game_assets, &ev);
-    }
-}
+    let texture_handle = asset_server.get_handle("textures/ball.png");
+    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(8.0, 8.0), 1, 6);
+    let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
-fn spawn_ball(commands: &mut Commands, game_assets: &GameAssets, ev: &SpawnBallEvent) {
-    let ball = commands
-        .spawn()
-        .insert(GameBall)
-        .insert_bundle(SpriteSheetBundle {
-            sprite: TextureAtlasSprite {
-                index: 0,
+    for ev in events.iter() {
+        let ball_id = commands
+            .spawn()
+            .insert(GameBall)
+            .insert(LastHitBy(Player::User))
+            .insert_bundle(SpriteSheetBundle {
+                sprite: TextureAtlasSprite {
+                    index: 0,
+                    ..Default::default()
+                },
+                texture_atlas: texture_atlas_handle.clone(),
+                transform: Transform::from_scale(Vec3::splat(PX_SCALE))
+                    .with_rotation(Quat::from_axis_angle(Vec3::Z, -0.7)),
                 ..Default::default()
-            },
-            texture_atlas: game_assets.ball_texture_atlas.clone(),
-            transform: Transform::from_scale(Vec3::splat(PX_SCALE))
-                .with_rotation(Quat::from_axis_angle(Vec3::Z, -0.7)),
-            ..Default::default()
-        })
-        .insert_bundle(RigidBodyBundle {
-            position: ev.position.0.into(),
-            velocity: ev.velocity.into(),
-            ..Default::default()
-        })
-        .insert_bundle(ColliderBundle {
-            shape: ColliderShape::ball(1.0).into(),
-            material: ColliderMaterial {
-                friction: 0.8,
-                restitution: 0.6,
+            })
+            .insert_bundle(RigidBodyBundle {
+                position: ev.position.0.into(),
+                velocity: ev.velocity.into(),
                 ..Default::default()
-            }
-            .into(),
-            ..Default::default()
-        })
-        .insert_bundle((
-            WorldPosition::default(),
-            WorldSprite::default(),
-            SyncWorldPosition,
-        ))
-        .id();
-    commands
-        .spawn_bundle((
-            Shadow { parent: ball },
-            WorldPosition(Vec3::new(ev.position.0.x, ev.position.0.y, 0.)),
-            SyncWorldPosition,
-        ))
-        .insert(WorldSprite {
-            base: Vec2::new(-0., -8.),
-            ..default()
-        })
-        .insert_bundle(SpriteSheetBundle {
-            sprite: TextureAtlasSprite {
-                index: 5,
+            })
+            .insert_bundle(ColliderBundle {
+                shape: ColliderShape::ball(1.0).into(),
+                material: ColliderMaterial {
+                    friction: 0.8,
+                    restitution: 0.6,
+                    ..Default::default()
+                }
+                .into(),
+                ..Default::default()
+            })
+            .insert_bundle((
+                WorldPosition::default(),
+                WorldSprite::default(),
+                SyncWorldPosition,
+            ))
+            .id();
+        commands
+            .spawn_bundle((
+                Shadow {
+                    parent: ball_id,
+                    scale: 1.0,
+                },
+                WorldPosition(Vec3::new(ev.position.0.x, ev.position.0.y, 0.)),
+                SyncWorldPosition,
+                GameBallShadow,
+            ))
+            .insert(WorldSprite {
+                base: Vec2::new(-0., -8.),
                 ..default()
-            },
-            texture_atlas: game_assets.ball_texture_atlas.clone(),
-            ..default()
-        });
+            })
+            .insert_bundle(SpriteSheetBundle {
+                sprite: TextureAtlasSprite {
+                    index: 5,
+                    ..default()
+                },
+                texture_atlas: texture_atlas_handle.clone(),
+                ..default()
+            });
+    }
 }

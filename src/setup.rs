@@ -10,10 +10,15 @@ impl Plugin for SetupPlugin {
             .add_plugin(EasingsPlugin)
             .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
             .init_resource::<ResourceHandles>()
-            .init_resource::<GameAssets>()
+            .init_resource::<UserScore>()
+            .init_resource::<OpponentScore>()
+            .init_resource::<BallBouncesSinceHit>()
             .add_event::<SpawnBallEvent>()
             .add_event::<SpawnCourtEvent>()
             .add_event::<SpawnPlayerEvent>()
+            .add_event::<HitEvent>()
+            .add_event::<PointOverEvent>()
+            .add_event::<GameOverEvent>()
             .add_system_set(SystemSet::on_enter(AppState::Loading).with_system(setup))
             .add_system_set(
                 SystemSet::on_update(AppState::Loading).with_system(check_resource_loading),
@@ -25,8 +30,6 @@ fn setup(
     mut commands: Commands,
     mut rapier_config: ResMut<RapierConfiguration>,
     mut texture_handles: ResMut<ResourceHandles>,
-    mut game_assets: ResMut<GameAssets>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     asset_server: Res<AssetServer>,
 ) {
     commands
@@ -37,25 +40,13 @@ fn setup(
         .insert(UiCamera);
     rapier_config.gravity = Vec3::new(0.0, 0.0, -15.0).into();
 
-    game_assets.ball_texture_atlas = texture_atlases.add(TextureAtlas::from_grid(
-        asset_server.get_handle("textures/ball.png"),
-        Vec2::new(8.0, 8.0),
-        1,
-        6,
-    ));
-
-    game_assets.court_texture_atlas = texture_atlases.add(TextureAtlas::from_grid(
-        asset_server.get_handle("textures/court_grass.png"),
-        Vec2::new(16.0, 16.0),
-        17,
-        16,
-    ));
-
     let fonts = ["fonts/Press_Start_2P/PressStart2P-Regular.ttf"];
     let textures = [
         "textures/ball.png",
         "textures/player.png",
+        "textures/opponent.png",
         "textures/court_grass.png",
+        "textures/net.png",
     ];
     texture_handles.0.extend(
         std::iter::empty()

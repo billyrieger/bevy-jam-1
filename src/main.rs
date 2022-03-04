@@ -8,6 +8,7 @@ use std::time::Duration;
 
 mod game;
 mod setup;
+mod ui;
 
 const Y_FAR_BASELINE: f32 = 10.5;
 const Y_FAR_MIDLINE: f32 = 0.5;
@@ -15,9 +16,11 @@ const Y_NETLINE: f32 = -7.;
 const Y_NEAR_MIDLINE: f32 = -11.75;
 const Y_NEAR_BASELINE: f32 = -19.75;
 
-const X_CENTER: f32 = 0.;
-const X_SINGLES: f32 = 15.25;
-const X_DOUBLES: f32 = 18.75;
+const X_DOUBLES_LINE_LEFT: f32 = -18.75;
+const X_SINGLES_LINE_LEFT: f32 = -15.25;
+const X_CENTER_LINE: f32 = 0.;
+const X_SINGLES_LINE_RIGHT: f32 = 15.25;
+const X_DOUBLES_LINE_RIGHT: f32 = 18.75;
 
 const NET_HEIGHT: f32 = 2.5;
 const NET_THICKNESS: f32 = 0.05;
@@ -28,7 +31,7 @@ const KEY_CODE_LEFT: KeyCode = KeyCode::Left;
 const KEY_CODE_RIGHT: KeyCode = KeyCode::Right;
 const KEY_CODE_ACTION: KeyCode = KeyCode::Space;
 
-const PLAYER_SPEED: f32 = 0.25;
+const PLAYER_SPEED: f32 = 15.;
 const PLAYER_CHARGING_SPEED_FACTOR: f32 = 0.4;
 const PLAYER_SWING_COOLDOWN_SECS: f32 = 0.5;
 
@@ -41,17 +44,11 @@ fn default<T: Default>() -> T {
     Default::default()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, SystemLabel)]
-enum SystemOrder {
-    Input,
-}
-
 // ====== State ======
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum AppState {
     Loading,
-    StartScreen,
     InGame,
 }
 
@@ -61,15 +58,18 @@ enum AppState {
 struct ResourceHandles(Vec<HandleUntyped>);
 
 #[derive(Default)]
-struct GameAssets {
-    ball_texture_atlas: Handle<TextureAtlas>,
-    court_texture_atlas: Handle<TextureAtlas>,
-    player_texture: Handle<TextureAtlas>,
-}
+struct UserScore(u32);
+
+#[derive(Default)]
+struct OpponentScore(u32);
 
 // ====== Events ======
 
-#[derive(Default)]
+struct SpawnPlayerEvent {
+    position: WorldPosition,
+    opponent: bool,
+}
+
 struct SpawnBallEvent {
     position: WorldPosition,
     velocity: RigidBodyVelocity,
@@ -77,19 +77,21 @@ struct SpawnBallEvent {
 
 struct SpawnCourtEvent;
 
-struct SpawnPlayerEvent {
-    position: WorldPosition,
-    opponent: bool,
+struct HitEvent {
+    ball_id: Entity,
+    new_velocity: Vec3,
 }
 
-struct BallBounceEvent;
+struct PointOverEvent {
+    winner: Player,
+}
 
-struct BallOutOfBoundsEvent;
+struct GameOverEvent;
+
+#[derive(Default)]
+struct BallBouncesSinceHit(u32);
 
 // ====== Components ======
-
-#[derive(Component)]
-struct DebugDot(Color);
 
 #[derive(Component, Clone, Copy, Debug, Default)]
 struct WorldPosition(Vec3);
@@ -111,14 +113,8 @@ struct UiCamera;
 #[derive(Component)]
 struct Shadow {
     parent: Entity,
+    scale: f32,
 }
-
-// Court components
-
-#[derive(Component)]
-struct Court;
-
-// Tennis ball components
 
 #[derive(Component)]
 struct SpriteAnimation {
@@ -135,6 +131,12 @@ struct SpriteAnimationFrame {
 struct CustomScale(f32);
 
 // ====== Player components ======
+
+#[derive(Component, Debug)]
+enum Player {
+    User,
+    Opponent,
+}
 
 #[derive(Component, Clone)]
 enum PlayerState {
@@ -173,6 +175,21 @@ struct CpuControlled;
 #[derive(Component)]
 struct GameBall;
 
+#[derive(Component)]
+struct GameBallShadow;
+
+#[derive(Component)]
+struct LastHitBy(Player);
+
+#[derive(Component)]
+struct UserScoreText;
+
+#[derive(Component)]
+struct OpponentScoreText;
+
+#[derive(Component)]
+struct ResultsText;
+
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
@@ -183,99 +200,8 @@ fn main() {
             ..Default::default()
         })
         .add_plugin(setup::SetupPlugin)
+        .add_plugin(ui::UiPlugin)
         .add_plugin(game::GamePlugin)
         .add_state(AppState::Loading)
-        // .add_system_set(SystemSet::on_enter(AppState::InGame).with_system(spawn_debug_dot))
-        .add_system_set(SystemSet::on_update(AppState::InGame).with_system(move_debug_dot).with_system(display_events
-        ))
         .run();
 }
-
-fn spawn_debug_dot(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-) {
-    let texture_handle = asset_server.get_handle("textures/ball.png");
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(8.0, 8.0), 1, 7);
-    let texture_atlas_handle = texture_atlases.add(texture_atlas);
-    let dot_id = commands
-        .spawn_bundle((
-            WorldPosition::default(),
-            SyncWorldPosition,
-            DebugDot(Color::RED),
-            UserControlled,
-        ))
-        .insert(WorldSprite::default())
-        .insert_bundle(SpriteSheetBundle {
-            sprite: TextureAtlasSprite {
-                index: 6,
-                ..default()
-            },
-            texture_atlas: texture_atlas_handle.clone(),
-            ..default()
-        })
-        .id();
-    commands
-        .spawn_bundle((
-            Shadow { parent: dot_id },
-            WorldPosition::default(),
-            SyncWorldPosition,
-        ))
-        .insert(WorldSprite::default())
-        .insert_bundle(SpriteSheetBundle {
-            sprite: TextureAtlasSprite {
-                index: 5,
-                ..default()
-            },
-            texture_atlas: texture_atlas_handle.clone(),
-            ..default()
-        });
-}
-
-fn move_debug_dot(
-    keyboard: Res<Input<KeyCode>>,
-    mut query: Query<&mut WorldPosition, With<DebugDot>>,
-) {
-    for mut position in query.iter_mut() {
-        if keyboard.just_pressed(KeyCode::A) {
-            position.0 -= 0.25 * Vec3::X;
-            info!("{position:?}");
-        }
-        if keyboard.just_pressed(KeyCode::D) {
-            position.0 += 0.25 * Vec3::X;
-            info!("{position:?}");
-        }
-        if keyboard.just_pressed(KeyCode::S) {
-            position.0 -= 0.25 * Vec3::Y;
-            info!("{position:?}");
-        }
-        if keyboard.just_pressed(KeyCode::W) {
-            position.0 += 0.25 * Vec3::Y;
-            info!("{position:?}");
-        }
-        if keyboard.just_pressed(KeyCode::Q) {
-            position.0 -= 0.25 * Vec3::Z;
-            info!("{position:?}");
-        }
-        if keyboard.just_pressed(KeyCode::E) {
-            position.0 += 0.25 * Vec3::Z;
-            info!("{position:?}");
-        }
-    }
-}
-
-
-fn display_events(
-    mut intersection_events: EventReader<IntersectionEvent>,
-    mut contact_events: EventReader<ContactEvent>,
-) {
-    for intersection_event in intersection_events.iter() {
-        // println!("Received intersection event: {:?}", intersection_event);
-    }
-
-    for contact_event in contact_events.iter() {
-        // println!("Received contact event: {:?}", contact_event);
-    }
-}
-

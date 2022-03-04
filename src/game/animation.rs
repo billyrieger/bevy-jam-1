@@ -63,7 +63,7 @@ impl SpriteAnimation {
     }
 
     pub(crate) fn opponent_swing() -> Self {
-        Self::new([29, 30], [0.05, 0.2], false)
+        Self::new([28, 29, 30], [0.1, 0.05, 0.2], false)
     }
 }
 
