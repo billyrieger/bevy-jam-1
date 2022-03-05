@@ -18,7 +18,10 @@ bevy_easings = "0.6.0"
 bevy_rapier3d = "0.12.1"
 rand = "0.8.5"
 
+[profile.dev]
+opt-level = 1
+
 [profile.release]
 lto = "thin"
-opt-level = "s"
-# strip = true
+opt-level = "z"
+strip = true

@@ -121,7 +121,11 @@ fn opponent_hit_system(
                 let delta_x = ball_pos.0.x - opponent_pos.0.x;
                 if delta_x.abs() < 2.0 {
                     *last_hit = LastHitBy(Player::Opponent);
-                    let return_velocity = Vec3::new(rand::random::<f32>() * 10., -15., 10.);
+                    let return_velocity = Vec3::new(
+                        rand::random::<f32>() * 6.,
+                        rand::random::<f32>() * 2.0 - 17.,
+                        10.,
+                    );
                     hit_events.send(HitEvent {
                         new_velocity: return_velocity,
                         ball_id,
@@ -190,15 +194,29 @@ fn user_release_charge_system(
                     player_position.0 + Vec3::new(9.0 * flip, 0.0, 11.0) * PX_SCALE / WORLD_SCALE;
                 for (ball_id, ball_pos, mut last_hit) in ball_query.iter_mut() {
                     let dist_to_ball = (sweet_spot - ball_pos.0).length();
-                    let hit_direction_xy = (Vec3::new(X_CENTER_LINE, Y_FAR_BASELINE, 0.)
+                    let direction_left = (Vec3::new(X_SINGLES_LINE_LEFT, Y_FAR_BASELINE, 3.)
                         - player_position.0)
                         .normalize();
+                    let direction_center = (Vec3::new(X_CENTER_LINE, Y_FAR_BASELINE, 0.)
+                        - player_position.0)
+                        .normalize();
+                    let direction_right = (Vec3::new(X_SINGLES_LINE_RIGHT, Y_FAR_BASELINE, 3.)
+                        - player_position.0)
+                        .normalize();
+                    let hit_direction_xy = if keyboard.pressed(KEY_CODE_LEFT) {
+                        direction_left
+                    } else if keyboard.pressed(KEY_CODE_RIGHT) {
+                        direction_right
+                    } else {
+                        direction_center
+                    };
+                    let direction = 20.0 * hit_direction_xy + Vec3::Z * 7.;
                     info!("{dist_to_ball:?}");
                     if dist_to_ball < 2.0 {
                         *last_hit = LastHitBy(Player::User);
                         hit_events.send(HitEvent {
                             ball_id,
-                            new_velocity: hit_direction_xy * 20. + Vec3::Z * 8.,
+                            new_velocity: direction,
                         });
                     }
                 }
@@ -234,7 +252,7 @@ fn turn_player_toward_ball(
     ball_query: Query<&WorldPosition, With<GameBall>>,
 ) {
     for (mut player_facing, player_state, player_pos) in player_query.iter_mut() {
-        if matches!(*player_state, PlayerState::Idle | PlayerState::Run | PlayerState::Charge) {
+        if matches!(*player_state, PlayerState::Idle | PlayerState::Run) {
             if let Ok(ball_pos) = ball_query.get_single() {
                 *player_facing = if ball_pos.0.x - player_pos.0.x > 0. {
                     PlayerFacing::Right
@@ -264,7 +282,7 @@ fn player_spawn_system(
 
     for ev in events.iter() {
         let speed = if ev.opponent {
-            PLAYER_SPEED
+            PLAYER_SPEED * 0.5
         } else {
             PLAYER_SPEED
         };
