@@ -1,30 +1,43 @@
-use crate::*;
+use crate::AppState;
+use bevy::diagnostic::LogDiagnosticsPlugin;
+use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::*;
+use bevy_rapier3d::prelude::*;
 
-pub(crate) struct SetupPlugin;
+const FONTS: &[&str] = &["fonts/Press_Start_2P/PressStart2P-Regular.ttf"];
+const TEXTURES: &[&str] = &["textures/player.png"];
+
+pub struct SetupPlugin;
 
 impl Plugin for SetupPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(DefaultPlugins)
-            // .add_plugin(FrameTimeDiagnosticsPlugin::default())
+    fn build(&self, mut app: &mut App) {
+        app = app
+            .add_plugins(DefaultPlugins)
             .add_plugin(LogDiagnosticsPlugin::default())
-            .add_plugin(EasingsPlugin)
-            .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
+            .add_plugin(bevy_rapier3d::physics::RapierPhysicsPlugin::<NoUserData>::default())
+            // .add_plugin(bevy_inspector_egui::WorldInspectorPlugin::default())
+            .add_plugin(ShapePlugin)
             .init_resource::<ResourceHandles>()
-            .init_resource::<UserScore>()
-            .init_resource::<OpponentScore>()
-            .init_resource::<BallBouncesSinceHit>()
-            .add_event::<SpawnBallEvent>()
-            .add_event::<SpawnCourtEvent>()
-            .add_event::<SpawnPlayerEvent>()
-            .add_event::<HitEvent>()
-            .add_event::<PointOverEvent>()
-            .add_event::<GameOverEvent>()
+            .add_system(bevy::input::system::exit_on_esc_system)
             .add_system_set(SystemSet::on_enter(AppState::Loading).with_system(setup))
             .add_system_set(
                 SystemSet::on_update(AppState::Loading).with_system(check_resource_loading),
             );
+        #[cfg(not(target = "wasm32"))]
+        app.add_system(bevy::input::system::exit_on_esc_system);
     }
 }
+
+// ====== Resources ======
+
+#[derive(Default)]
+struct ResourceHandles(Vec<HandleUntyped>);
+
+#[derive(Component)]
+struct MainCamera;
+
+#[derive(Component)]
+struct UiCamera;
 
 fn setup(
     mut commands: Commands,
@@ -38,9 +51,8 @@ fn setup(
     commands
         .spawn_bundle(UiCameraBundle::default())
         .insert(UiCamera);
-    rapier_config.gravity = Vec3::new(0.0, 0.0, -15.0).into();
+    // rapier_config.gravity = Vec3::new(0.0, -15.0, ).into();
 
-    let fonts = ["fonts/Press_Start_2P/PressStart2P-Regular.ttf"];
     let textures = [
         "textures/ball.png",
         "textures/player.png",
@@ -50,7 +62,7 @@ fn setup(
     ];
     texture_handles.0.extend(
         std::iter::empty()
-            .chain(fonts)
+            .chain(FONTS.into_iter().copied())
             .chain(textures)
             .map(|filename| asset_server.load_untyped(filename)),
     );

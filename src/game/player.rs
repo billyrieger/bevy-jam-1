@@ -1,19 +1,20 @@
 use crate::*;
 
-pub(crate) struct PlayerPlugin;
+use super::animation::SpriteAnimation;
+use super::ball::{GameBall, HitEvent, LastHitBy};
+use super::world::{Shadow, SyncWorldPosition, WorldPosition, WorldSprite};
+
+pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(
+        app.add_event::<SpawnPlayerEvent>().add_system_set(
             SystemSet::on_update(AppState::InGame)
                 .with_system(user_movement_system)
                 .with_system(user_begin_charge_system)
                 .with_system(user_release_charge_system)
                 .with_system(opponent_movement_system)
-                .with_system(opponent_hit_system),
-        )
-        .add_system_set(
-            SystemSet::on_update(AppState::InGame)
+                .with_system(opponent_hit_system)
                 .with_system(player_spawn_system)
                 .with_system(tick_swing_cooldown_system)
                 .with_system(flip_sprite_facing_system)
@@ -23,6 +24,53 @@ impl Plugin for PlayerPlugin {
         );
     }
 }
+
+// ====== Events ======
+
+pub struct SpawnPlayerEvent {
+    pub position: WorldPosition,
+    pub opponent: bool,
+}
+
+// ====== Components ======
+
+#[derive(Component, Debug)]
+pub enum Player {
+    User,
+    Opponent,
+}
+
+#[derive(Component, Clone)]
+pub enum PlayerState {
+    Idle,
+    Run,
+    Charge,
+    Swing,
+}
+
+#[derive(Component)]
+struct PlayerSpeed(f32);
+
+#[derive(Component)]
+struct PlayerDirection(Vec3);
+
+#[derive(Component)]
+enum PlayerFacing {
+    Right,
+    Left,
+}
+
+#[derive(Component)]
+struct SwingCooldown(Timer);
+
+#[derive(Component)]
+struct UserControlled;
+
+#[derive(Component)]
+struct Opponent;
+
+#[derive(Component)]
+struct CpuControlled;
 
 fn update_animation_system(
     mut query: Query<(&Player, &PlayerState, &mut SpriteAnimation), Changed<PlayerState>>,
@@ -55,10 +103,10 @@ fn user_movement_system(
             direction -= Vec3::X;
         }
         if keyboard.pressed(KEY_CODE_UP) {
-            direction += Vec3::Y;
+            direction -= Vec3::Z;
         }
         if keyboard.pressed(KEY_CODE_DOWN) {
-            direction -= Vec3::Y;
+            direction += Vec3::Z;
         }
         if direction.length() > 0. {
             position.0 += direction.normalize() * speed.0 * time.delta().as_secs_f32();
@@ -191,26 +239,27 @@ fn user_release_charge_system(
                     1.0
                 };
                 let sweet_spot =
-                    player_position.0 + Vec3::new(9.0 * flip, 0.0, 11.0) * PX_SCALE / WORLD_SCALE;
+                    player_position.0 + Vec3::new(9.0 * flip, 0.0, 11.0) / WORLD_SCALE;
                 for (ball_id, ball_pos, mut last_hit) in ball_query.iter_mut() {
                     let dist_to_ball = (sweet_spot - ball_pos.0).length();
-                    let direction_left = (Vec3::new(X_SINGLES_LINE_LEFT, Y_FAR_BASELINE, 3.)
-                        - player_position.0)
-                        .normalize();
-                    let direction_center = (Vec3::new(X_CENTER_LINE, Y_FAR_BASELINE, 0.)
-                        - player_position.0)
-                        .normalize();
-                    let direction_right = (Vec3::new(X_SINGLES_LINE_RIGHT, Y_FAR_BASELINE, 3.)
-                        - player_position.0)
-                        .normalize();
-                    let hit_direction_xy = if keyboard.pressed(KEY_CODE_LEFT) {
-                        direction_left
-                    } else if keyboard.pressed(KEY_CODE_RIGHT) {
-                        direction_right
-                    } else {
-                        direction_center
-                    };
-                    let direction = 20.0 * hit_direction_xy + Vec3::Z * 7.;
+                    // let direction_left = (Vec3::new(X_SINGLES_LINE_LEFT, Y_FAR_BASELINE, 3.)
+                    //     - player_position.0)
+                    //     .normalize();
+                    // let direction_center = (Vec3::new(X_CENTER_LINE, Y_FAR_BASELINE, 0.)
+                    //     - player_position.0)
+                    //     .normalize();
+                    // let direction_right = (Vec3::new(X_SINGLES_LINE_RIGHT, Y_FAR_BASELINE, 3.)
+                    //     - player_position.0)
+                    //     .normalize();
+                    // let hit_direction_xy = if keyboard.pressed(KEY_CODE_LEFT) {
+                    //     direction_left
+                    // } else if keyboard.pressed(KEY_CODE_RIGHT) {
+                    //     direction_right
+                    // } else {
+                    //     direction_center
+                    // };
+                    // let direction = 20.0 * hit_direction_xy + Vec3::Z * 7.;
+                    let direction = -Vec3::Z;
                     info!("{dist_to_ball:?}");
                     if dist_to_ball < 2.0 {
                         *last_hit = LastHitBy(Player::User);
@@ -306,13 +355,12 @@ fn player_spawn_system(
                 ev.position,
                 SyncWorldPosition,
                 WorldSprite {
-                    base: Vec2::new(0.0, -10.5) * PX_SCALE,
+                    base: Vec2::new(0.0, -10.5),
                     ..Default::default()
                 },
             ))
             .insert_bundle(SpriteSheetBundle {
                 texture_atlas: texture_atlas_handle.clone(),
-                transform: Transform::from_scale(Vec3::splat(PX_SCALE)),
                 ..Default::default()
             })
             .insert(SpriteAnimation::player_idle())
@@ -326,11 +374,11 @@ fn player_spawn_system(
             .spawn_bundle((
                 Shadow {
                     parent: id,
-                    scale: 1.0,
+                    scale: 1.,
                 },
                 WorldPosition::default(),
                 WorldSprite {
-                    base: Vec2::new(0.0, -10.5) * PX_SCALE,
+                    base: Vec2::new(0., -10.5),
                 },
                 SyncWorldPosition,
             ))

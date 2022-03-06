@@ -1,5 +1,7 @@
 use crate::*;
 
+use super::level::{OpponentScore, UserScore};
+
 pub(crate) struct UiPlugin;
 
 impl Plugin for UiPlugin {
@@ -10,6 +12,15 @@ impl Plugin for UiPlugin {
             );
     }
 }
+
+#[derive(Component)]
+pub struct UserScoreText;
+
+#[derive(Component)]
+pub struct OpponentScoreText;
+
+#[derive(Component)]
+pub struct ResultsText;
 
 fn sync_score_text_system(
     user_score: ResMut<UserScore>,
@@ -32,8 +43,8 @@ fn setup_ui_text(mut commands: Commands, asset_server: Res<AssetServer>) {
                 align_self: AlignSelf::FlexEnd,
                 position_type: PositionType::Absolute,
                 position: Rect {
-                    top: Val::Px(5.0),
-                    left: Val::Px(5.0),
+                    top: Val::Px(5.),
+                    left: Val::Px(5.),
                     ..default()
                 },
                 ..default()
@@ -42,7 +53,7 @@ fn setup_ui_text(mut commands: Commands, asset_server: Res<AssetServer>) {
                 "User:     0",
                 TextStyle {
                     font: asset_server.load("fonts/Press_Start_2P/PressStart2P-Regular.ttf"),
-                    font_size: 24.0,
+                    font_size: 8.,
                     color: Color::WHITE,
                 },
                 TextAlignment {
@@ -69,7 +80,7 @@ fn setup_ui_text(mut commands: Commands, asset_server: Res<AssetServer>) {
                 "Opponent: 0",
                 TextStyle {
                     font: asset_server.load("fonts/Press_Start_2P/PressStart2P-Regular.ttf"),
-                    font_size: 24.0,
+                    font_size: 8.,
                     color: Color::WHITE,
                 },
                 TextAlignment {
@@ -96,7 +107,7 @@ fn setup_ui_text(mut commands: Commands, asset_server: Res<AssetServer>) {
                 "",
                 TextStyle {
                     font: asset_server.load("fonts/Press_Start_2P/PressStart2P-Regular.ttf"),
-                    font_size: 24.0,
+                    font_size: 8.,
                     color: Color::WHITE,
                 },
                 TextAlignment {

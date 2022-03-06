@@ -1,16 +1,45 @@
 use crate::*;
 
+use super::{world::{WorldPosition, WorldSprite, SyncWorldPosition, Shadow}, player::Player};
+
 pub(crate) struct BallPlugin;
 
 impl Plugin for BallPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(
-            SystemSet::on_update(AppState::InGame)
-                .with_system(ball_spawner)
-                .with_system(hit_ball_system),
-        );
+        app.add_event::<SpawnBallEvent>()
+            .init_resource::<BallBouncesSinceHit>()
+            .add_event::<HitEvent>()
+            .add_system_set(
+                SystemSet::on_update(AppState::InGame)
+                    .with_system(ball_spawner)
+                    .with_system(hit_ball_system),
+            );
     }
 }
+
+#[derive(Default)]
+pub struct BallBouncesSinceHit(pub u32);
+
+// ====== Events ======
+
+pub struct SpawnBallEvent {
+    pub position: WorldPosition,
+    pub velocity: RigidBodyVelocity,
+}
+
+pub struct HitEvent {
+    pub ball_id: Entity,
+    pub new_velocity: Vec3,
+}
+
+#[derive(Component)]
+pub struct GameBall;
+
+#[derive(Component)]
+pub struct GameBallShadow;
+
+#[derive(Component)]
+pub struct LastHitBy(pub Player);
 
 fn hit_ball_system(
     mut bounces: ResMut<BallBouncesSinceHit>,
@@ -50,8 +79,7 @@ fn ball_spawner(
                     ..Default::default()
                 },
                 texture_atlas: texture_atlas_handle.clone(),
-                transform: Transform::from_scale(Vec3::splat(PX_SCALE))
-                    .with_rotation(Quat::from_axis_angle(Vec3::Z, -0.7)),
+                transform: Transform::from_rotation(Quat::from_axis_angle(Vec3::Z, -0.7)),
                 ..Default::default()
             })
             .insert_bundle(RigidBodyBundle {
@@ -86,7 +114,7 @@ fn ball_spawner(
                 GameBallShadow,
             ))
             .insert(WorldSprite {
-                base: Vec2::new(-0., -8.),
+                base: Vec2::new(-0., -4.),
                 ..default()
             })
             .insert_bundle(SpriteSheetBundle {

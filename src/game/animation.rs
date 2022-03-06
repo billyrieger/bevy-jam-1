@@ -8,6 +8,17 @@ impl Plugin for AnimationPlugin {
     }
 }
 
+#[derive(Component)]
+pub struct SpriteAnimation {
+    frames: Vec<SpriteAnimationFrame>,
+    timer: Timer,
+}
+
+struct SpriteAnimationFrame {
+    sprite_index: usize,
+    duration: Duration,
+}
+
 impl SpriteAnimation {
     pub(crate) fn new<const N: usize>(
         indices: [usize; N],
