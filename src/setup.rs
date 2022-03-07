@@ -51,17 +51,10 @@ fn setup(
         .spawn_bundle(UiCameraBundle::default())
         .insert(UiCamera);
 
-    let textures = [
-        "textures/ball.png",
-        "textures/player.png",
-        "textures/opponent.png",
-        "textures/court_grass.png",
-        "textures/net.png",
-    ];
     texture_handles.0.extend(
         std::iter::empty()
-            .chain(FONTS.into_iter().copied())
-            .chain(textures)
+            .chain(FONTS.iter().copied())
+            .chain(TEXTURES.iter().copied())
             .map(|filename| asset_server.load_untyped(filename)),
     );
 }

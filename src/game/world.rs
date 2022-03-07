@@ -14,7 +14,6 @@ impl Plugin for WorldPlugin {
                 .with_system(sync_transforms)
                 .with_system(sync_physics_coords)
                 .with_system(move_camera_view_system)
-                .with_system(draw_world_lines_system)
                 // .with_system(sync_shadow_position_system)
                 .with_system(sync_physics_coords),
         );
@@ -75,26 +74,6 @@ fn move_camera_view_system(input: Res<Input<KeyCode>>, mut camera_view: ResMut<C
 
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct WorldPosition(pub Vec3);
-
-#[derive(Component)]
-pub struct WorldLine {
-    pub start: Vec3,
-    pub end: Vec3,
-}
-
-fn draw_world_lines_system(
-    camera_view: Res<CameraView>,
-    mut query: Query<(&mut bevy_prototype_lyon::entity::Path, &WorldLine)>,
-) {
-    for (mut path, line) in query.iter_mut() {
-        let start = camera_view.to_screen(line.start);
-        let end = camera_view.to_screen(line.end);
-        let mut path_builder = PathBuilder::new();
-        path_builder.move_to(start);
-        path_builder.line_to(end);
-        *path = path_builder.build();
-    }
-}
 
 #[derive(Component)]
 pub struct SyncWorldPosition;
