@@ -4,6 +4,9 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use std::time::Duration;
 
+mod prelude {
+}
+
 mod game;
 mod setup;
 
@@ -13,12 +16,12 @@ const KEY_CODE_LEFT: KeyCode = KeyCode::Left;
 const KEY_CODE_RIGHT: KeyCode = KeyCode::Right;
 const KEY_CODE_ACTION: KeyCode = KeyCode::Space;
 
-const PLAYER_SPEED: f32 = 15.;
+const PLAYER_SPEED: f32 = 30.;
 const PLAYER_CHARGING_SPEED_FACTOR: f32 = 0.4;
 const PLAYER_SWING_COOLDOWN_SECS: f32 = 0.5;
 
-const BG_WIDTH: f32 = 272.;
-const BG_HEIGHT: f32 = 256.;
+const BG_WIDTH: f32 = 320.;
+const BG_HEIGHT: f32 = 180.;
 const WORLD_SCALE: f32 = 5.;
 
 fn default<T: Default>() -> T {

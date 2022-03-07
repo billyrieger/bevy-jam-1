@@ -1,8 +1,8 @@
 use crate::*;
+use bevy_prototype_lyon::prelude::*;
 
-const DEPTH_SCALE: f32 = 0.0055;
-const CAMERA_HEIGHT_DEFAULT: f32 = 40.;
-const CAMERA_DEPTH_DEFAULT: f32 = 120.;
+const CAMERA_HEIGHT_DEFAULT: f32 = 10.;
+const CAMERA_DEPTH_DEFAULT: f32 = 70.;
 
 pub struct WorldPlugin;
 
@@ -14,6 +14,7 @@ impl Plugin for WorldPlugin {
                 .with_system(sync_transforms)
                 .with_system(sync_physics_coords)
                 .with_system(move_camera_view_system)
+                .with_system(draw_world_lines_system)
                 // .with_system(sync_shadow_position_system)
                 .with_system(sync_physics_coords),
         );
@@ -21,14 +22,15 @@ impl Plugin for WorldPlugin {
 }
 
 // Camera points in the negative z direction with the image plane at z=0
+#[derive(Debug)]
 pub struct CameraView {
-    position: Vec3,
+    pub position: Vec3,
 }
 
 impl Default for CameraView {
     fn default() -> Self {
         Self {
-            position: Vec3::new(0.0, CAMERA_HEIGHT_DEFAULT, CAMERA_DEPTH_DEFAULT),
+            position: Vec3::new(0., CAMERA_HEIGHT_DEFAULT, CAMERA_DEPTH_DEFAULT),
         }
     }
 }
@@ -46,15 +48,56 @@ impl CameraView {
 
 fn move_camera_view_system(input: Res<Input<KeyCode>>, mut camera_view: ResMut<CameraView>) {
     if input.just_pressed(KeyCode::W) {
-        camera_view.position.z -= 10.;
+        camera_view.position.z -= 5.;
+        info!("{camera_view:?}");
     }
-    if input.just_pressed(KeyCode::W) {
-        camera_view.position.z += 10.;
+    if input.just_pressed(KeyCode::S) {
+        camera_view.position.z += 5.;
+        info!("{camera_view:?}");
+    }
+    if input.just_pressed(KeyCode::A) {
+        camera_view.position.x -= 5.;
+        info!("{camera_view:?}");
+    }
+    if input.just_pressed(KeyCode::D) {
+        camera_view.position.x += 5.;
+        info!("{camera_view:?}");
+    }
+    if input.just_pressed(KeyCode::Q) {
+        camera_view.position.y += 5.;
+        info!("{camera_view:?}");
+    }
+    if input.just_pressed(KeyCode::E) {
+        camera_view.position.y -= 5.;
+        info!("{camera_view:?}");
     }
 }
 
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct WorldPosition(pub Vec3);
+
+#[derive(Component)]
+pub struct WorldLine {
+    pub start: Vec3,
+    pub end: Vec3,
+}
+
+fn draw_world_lines_system(
+    camera_view: Res<CameraView>,
+    mut query: Query<(&mut bevy_prototype_lyon::entity::Path, &WorldLine)>,
+) {
+    for (mut path, line) in query.iter_mut() {
+        let start = camera_view.to_screen(line.start);
+        let end = camera_view.to_screen(line.end);
+        let mut path_builder = PathBuilder::new();
+        path_builder.move_to(start);
+        path_builder.line_to(end);
+        *path = path_builder.build();
+    }
+}
+
+#[derive(Component)]
+pub struct SyncWorldPosition;
 
 fn sync_transforms(
     camera_view: Res<CameraView>,
@@ -71,9 +114,6 @@ fn sync_transforms(
 pub struct WorldSprite {
     pub base: Vec2,
 }
-
-#[derive(Component)]
-pub struct SyncWorldPosition;
 
 #[derive(Component)]
 pub struct Shadow {

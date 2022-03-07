@@ -1,179 +1,163 @@
-use super::ball::{BallBouncesSinceHit, GameBall, LastHitBy};
-use super::level::PointOverEvent;
-use super::world::{CameraView, SyncWorldPosition, WorldPosition, WorldSprite};
-use crate::game::player::Player;
-use crate::AppState;
+use super::world::{CameraView, WorldPosition};
+use crate::{AppState, WORLD_SCALE};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
-use bevy_rapier3d::prelude::*;
-
-pub const NET_TO_BASELINE: f32 = 39.;
-pub const NET_TO_SERVICE_LINE: f32 = 21.;
-pub const COURT_WIDTH_SINGLES: f32 = 27.;
-pub const COURT_WIDTH_DOUBLES: f32 = 36.;
 
 pub struct CourtPlugin;
 
 impl Plugin for CourtPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<SpawnCourtEvent>().add_system_set(
-            SystemSet::on_update(AppState::InGame).with_system(court_spawner_system),
-        );
+        app.add_system_set(SystemSet::on_enter(AppState::InGame).with_system(spawn_court_system))
+            .add_system_set(SystemSet::on_update(AppState::InGame).with_system(draw_court_system));
     }
 }
 
 #[derive(Component)]
 struct CourtDimensions {
-    baseline_depth: f32,
-    service_line_depth: f32,
-    singles_width: f32,
-    doubles_width: f32,
+    net_to_baseline: f32,
+    net_to_service_line: f32,
+    center_to_sideline: f32,
+    alley_width: f32,
 }
 
-#[derive(Component)]
-struct Outline(Path);
-
-fn draw_court_system(camera_view: Res<CameraView>, courts: Query<(&WorldPosition, &CourtDimensions, &mut Outline)>) {
-    for (pos, dimensions, outline_path) in courts.iter() {
-
+impl Default for CourtDimensions {
+    fn default() -> Self {
+        Self {
+            net_to_baseline: 39.,
+            net_to_service_line: 21.,
+            center_to_sideline: 13.5,
+            alley_width: 4.5,
+        }
     }
 }
 
 pub struct SpawnCourtEvent;
 
-fn court_spawner_system(
-    viewer: Res<CameraView>,
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut events: EventReader<SpawnCourtEvent>,
-) {
-    for _ in events.iter() {
-        let corners = [
-            Vec3::new(-COURT_WIDTH_SINGLES / 2., 0., NET_TO_BASELINE),
-            Vec3::new(-COURT_WIDTH_SINGLES / 2., 0., -NET_TO_BASELINE),
-            Vec3::new(COURT_WIDTH_SINGLES / 2., 0., -NET_TO_BASELINE),
-            Vec3::new(COURT_WIDTH_SINGLES / 2., 0., NET_TO_BASELINE),
-        ]
-        .map(|p| viewer.to_screen(p));
-        let mut path_builder = PathBuilder::new();
-        for (p0, p1) in corners.iter().zip(corners.iter().cycle().skip(1)) {
-            path_builder.move_to(*p0);
-            path_builder.line_to(*p1);
-        }
-        let line = path_builder.build();
-
-        commands.spawn_bundle(GeometryBuilder::build_as(
-            &line.0,
-            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.)),
-            Transform::default(),
-        ));
-
-        // commands
-        //     .spawn_bundle(SpriteBundle {
-        //         texture: asset_server.load("textures/net.png"),
-        //         ..Default::default()
-        //     })
-        //     .insert_bundle((
-        //         WorldPosition(Vec3::new(0., Y_NETLINE, 0.)),
-        //         SyncWorldPosition,
-        //         WorldSprite {
-        //             base: Vec2::new(0., -5.5),
-        //         },
-        //     ));
-        commands
-            .spawn()
-            // .spawn_bundle(SpriteBundle {
-            //     texture: asset_server.load("textures/court_grass.png"),
-            //     ..Default::default()
-            // })
-            .with_children(|parent| {
-                // floor
-                parent.spawn_bundle(ColliderBundle {
-                    shape: ColliderShape::cuboid(200.0, 200.0, 10.0).into(),
-                    flags: ActiveEvents::CONTACT_EVENTS.into(),
-                    position: (Vec3::new(0.0, 0.0, -10.0), Quat::IDENTITY).into(),
-                    material: ColliderMaterial {
-                        friction: 0.9,
-                        restitution: 0.5,
-                        ..Default::default()
-                    }
-                    .into(),
-                    ..Default::default()
-                });
-                // wall
-                parent.spawn_bundle(ColliderBundle {
-                    shape: ColliderShape::cuboid(200.0, 1.0, 200.0).into(),
-                    position: (Vec3::new(0.0, 15.0, 0.0), Quat::IDENTITY).into(),
-                    material: ColliderMaterial {
-                        friction: 0.6,
-                        restitution: 0.8,
-                        ..Default::default()
-                    }
-                    .into(),
-                    ..Default::default()
-                });
-                // net
-                // parent.spawn_bundle(ColliderBundle {
-                //     position: (
-                //         Vec3::new(X_CENTER_LINE, Y_NETLINE, NET_HEIGHT / 2.0),
-                //         Quat::IDENTITY,
-                //     )
-                //         .into(),
-                //     shape: ColliderShape::cuboid(
-                //         X_DOUBLES_LINE_RIGHT,
-                //         NET_THICKNESS / 2.0,
-                //         NET_HEIGHT / 2.0,
-                //     )
-                //     .into(),
-                //     material: ColliderMaterial {
-                //         friction: 0.6,
-                //         restitution: 0.8,
-                //         ..Default::default()
-                //     }
-                //     .into(),
-                //     ..Default::default()
-                // });
-            });
-    }
+#[derive(Component)]
+struct Court {
+    dimensions: CourtDimensions,
+    ground: Entity,
+    outline: Entity,
+    surface: Entity,
 }
 
-// fn handle_bounces_system(
-//     mut contact_events: EventReader<ContactEvent>,
-//     mut bounces_counter: ResMut<BallBouncesSinceHit>,
-//     ball_query: Query<(&WorldPosition, &LastHitBy), With<GameBall>>,
-//     mut point_over_events: EventWriter<PointOverEvent>,
-// ) {
-//     for ev in contact_events.iter() {
-//         match ev {
-//             ContactEvent::Started(_, _) => {
-//                 bounces_counter.0 += 1;
-//                 let double_bounce = bounces_counter.0 == 2;
-//                 let (ball_pos, last_hit) = ball_query.single();
-//                 let x_min = X_SINGLES_LINE_LEFT;
-//                 let x_max = X_SINGLES_LINE_RIGHT;
-//                 let y_min = match last_hit.0 {
-//                     Player::User => Y_NETLINE,
-//                     Player::Opponent => Y_NEAR_BASELINE,
-//                 };
-//                 let y_max = match last_hit.0 {
-//                     Player::User => Y_FAR_BASELINE,
-//                     Player::Opponent => Y_NETLINE,
-//                 };
-//                 let inbounds = ball_pos.0.x >= x_min
-//                     && ball_pos.0.x <= x_max
-//                     && ball_pos.0.y >= y_min
-//                     && ball_pos.0.y <= y_max;
-//                 let winner = match (&last_hit.0, inbounds, double_bounce) {
-//                     (Player::User, true, false) | (Player::Opponent, true, false) => continue,
-//                     (Player::Opponent, false, false) => Player::User,
-//                     (Player::User, false, false) => Player::Opponent,
-//                     (Player::Opponent, _, true) => Player::Opponent,
-//                     (Player::User, _, true) => Player::User,
-//                 };
-//                 info!("the winner is: {winner:?}");
-//                 point_over_events.send(PointOverEvent { winner });
-//             }
-//             ContactEvent::Stopped(_, _) => {}
-//         }
-//     }
-// }
+fn spawn_court_system(mut commands: Commands) {
+    let ground_entity = commands
+        .spawn_bundle(GeometryBuilder::build_as(
+            &shapes::Rectangle::default(),
+            DrawMode::Fill(FillMode {
+                color: Color::hex("7a9b00").unwrap(),
+                options: FillOptions::DEFAULT,
+            }),
+            Transform::default(),
+        ))
+        .id();
+    let surface_entity = commands
+        .spawn_bundle(GeometryBuilder::build_as(
+            &shapes::Rectangle::default(),
+            DrawMode::Fill(FillMode {
+                color: Color::hex("366d00").unwrap(),
+                options: FillOptions::DEFAULT,
+            }),
+            Transform::default(),
+        ))
+        .id();
+    let outline_entity = commands
+        .spawn_bundle(GeometryBuilder::build_as(
+            &PathBuilder::new().build().0,
+            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.)),
+            Transform::default(),
+        ))
+        .insert(CourtOutline)
+        .id();
+    commands
+        .spawn()
+        .insert(WorldPosition(Vec3::ZERO))
+        .insert(Court {
+            outline: outline_entity,
+            surface: surface_entity,
+            ground: ground_entity,
+            dimensions: CourtDimensions::default(),
+        })
+        .add_child(outline_entity);
+}
+
+#[derive(Component)]
+struct Ground;
+
+#[derive(Component)]
+struct CourtOutline;
+
+#[derive(Component)]
+struct CourtSurface;
+
+fn draw_court_system(
+    view: Res<CameraView>,
+    q_court: Query<(&Court, &WorldPosition)>,
+    mut q_paths: Query<&mut Path>,
+) {
+    for (court, _court_center) in q_court.iter() {
+        // draw the ground
+        let mut ground_path = q_paths
+            .get_mut(court.ground)
+            .expect("ground entity not found");
+        let horizon_line = view.position.y * WORLD_SCALE;
+        let rect = shapes::Rectangle {
+            extents: Vec2::new(320., 500.),
+            origin: RectangleOrigin::CustomCenter(Vec2::new(0., horizon_line - 250.)),
+        };
+        *ground_path = ShapePath::new().add(&rect).build();
+
+        let baseline = court.dimensions.net_to_baseline * Vec3::Z;
+        let service_line = court.dimensions.net_to_service_line * Vec3::Z;
+        let sideline = court.dimensions.center_to_sideline * Vec3::X;
+        let alley = sideline + court.dimensions.alley_width * Vec3::X;
+
+        let mut surface_path = q_paths
+            .get_mut(court.surface)
+            .expect("surface entity not found");
+        let surface_corners = [
+            -alley + baseline,
+            alley + baseline,
+            alley - baseline,
+            -alley - baseline,
+        ]
+        .map(|p| view.to_screen(p));
+        *surface_path = ShapePath::new()
+            .add(&shapes::Polygon {
+                points: surface_corners.to_vec(),
+                closed: true,
+            })
+            .build();
+
+        let mut outline_path = q_paths
+            .get_mut(court.outline)
+            .expect("outline entity not found");
+
+        let segment_endpoints = [
+            // net line
+            (-alley, alley),
+            // near & far baselines
+            (-alley + baseline, alley + baseline),
+            (-alley - baseline, alley - baseline),
+            // near & far service lines
+            (-sideline + service_line, sideline + service_line),
+            (sideline - baseline, sideline + baseline),
+            // right & left alleys
+            (alley - baseline, alley + baseline),
+            (-alley - baseline, -alley + baseline),
+            // right & left sidelines
+            (-sideline - baseline, -sideline + baseline),
+            (-sideline - service_line, sideline - service_line),
+            // center service line
+            (-service_line, service_line),
+        ];
+
+        let mut path = PathBuilder::new();
+        for (p0, p1) in segment_endpoints {
+            path.move_to(view.to_screen(p0));
+            path.line_to(view.to_screen(p1));
+        }
+        *outline_path = path.build();
+    }
+}

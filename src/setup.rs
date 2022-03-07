@@ -41,7 +41,6 @@ struct UiCamera;
 
 fn setup(
     mut commands: Commands,
-    mut rapier_config: ResMut<RapierConfiguration>,
     mut texture_handles: ResMut<ResourceHandles>,
     asset_server: Res<AssetServer>,
 ) {
@@ -51,7 +50,6 @@ fn setup(
     commands
         .spawn_bundle(UiCameraBundle::default())
         .insert(UiCamera);
-    // rapier_config.gravity = Vec3::new(0.0, -15.0, ).into();
 
     let textures = [
         "textures/ball.png",
