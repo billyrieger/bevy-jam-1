@@ -1,10 +1,14 @@
 #![feature(array_windows, try_blocks)]
 
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
 use std::time::Duration;
 
 mod prelude {
+    pub use crate::game::world::{CameraView, WorldPolyline, WorldPosition, WorldPositionSync};
+    pub use crate::{AppState, WORLD_SCALE};
+    pub use bevy::prelude::*;
+    pub use bevy_prototype_lyon::prelude::*;
+    pub use bevy_rapier3d::prelude::*;
 }
 
 mod game;
@@ -22,14 +26,14 @@ const PLAYER_SWING_COOLDOWN_SECS: f32 = 0.5;
 
 const BG_WIDTH: f32 = 320.;
 const BG_HEIGHT: f32 = 180.;
-const WORLD_SCALE: f32 = 5.;
+pub const WORLD_SCALE: f32 = 12.;
 
 fn default<T: Default>() -> T {
     Default::default()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum AppState {
+pub enum AppState {
     Loading,
     InGame,
 }

@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 
-mod animation;
-mod ball;
+// mod animation;
+// mod ball;
 mod court;
-mod level;
-mod player;
-mod ui;
-mod world;
+// mod level;
+// mod player;
+// mod ui;
+pub mod world;
 
 pub struct GamePlugin;
 

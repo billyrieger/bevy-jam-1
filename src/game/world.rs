@@ -1,8 +1,4 @@
-use crate::*;
-use bevy_prototype_lyon::prelude::*;
-
-const CAMERA_HEIGHT_DEFAULT: f32 = 10.;
-const CAMERA_DEPTH_DEFAULT: f32 = 70.;
+use crate::prelude::*;
 
 pub struct WorldPlugin;
 
@@ -11,10 +7,8 @@ impl Plugin for WorldPlugin {
         app.insert_resource(CameraView::default());
         app.add_system_set(
             SystemSet::on_update(AppState::InGame)
-                .with_system(sync_transforms)
-                .with_system(sync_physics_coords)
-                .with_system(move_camera_view_system)
-                // .with_system(sync_shadow_position_system)
+                .with_system(world_position_sync_system)
+                .with_system(draw_world_polyline_system)
                 .with_system(sync_physics_coords),
         );
     }
@@ -29,7 +23,7 @@ pub struct CameraView {
 impl Default for CameraView {
     fn default() -> Self {
         Self {
-            position: Vec3::new(0., CAMERA_HEIGHT_DEFAULT, CAMERA_DEPTH_DEFAULT),
+            position: Vec3::new(0., 5., 24.),
         }
     }
 }
@@ -45,47 +39,39 @@ impl CameraView {
     }
 }
 
-fn move_camera_view_system(input: Res<Input<KeyCode>>, mut camera_view: ResMut<CameraView>) {
-    if input.just_pressed(KeyCode::W) {
-        camera_view.position.z -= 5.;
-        info!("{camera_view:?}");
-    }
-    if input.just_pressed(KeyCode::S) {
-        camera_view.position.z += 5.;
-        info!("{camera_view:?}");
-    }
-    if input.just_pressed(KeyCode::A) {
-        camera_view.position.x -= 5.;
-        info!("{camera_view:?}");
-    }
-    if input.just_pressed(KeyCode::D) {
-        camera_view.position.x += 5.;
-        info!("{camera_view:?}");
-    }
-    if input.just_pressed(KeyCode::Q) {
-        camera_view.position.y += 5.;
-        info!("{camera_view:?}");
-    }
-    if input.just_pressed(KeyCode::E) {
-        camera_view.position.y -= 5.;
-        info!("{camera_view:?}");
-    }
-}
-
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct WorldPosition(pub Vec3);
 
 #[derive(Component)]
-pub struct SyncWorldPosition;
+pub struct WorldPositionSync;
 
-fn sync_transforms(
+fn world_position_sync_system(
     camera_view: Res<CameraView>,
-    mut query: Query<(&mut Transform, &WorldPosition), With<SyncWorldPosition>>,
+    mut query: Query<(&mut Transform, &WorldPosition), With<WorldPositionSync>>,
 ) {
     for (mut transform, world_coords) in query.iter_mut() {
         let depth_scale = camera_view.depth_scale(world_coords.0);
         transform.translation = camera_view.to_screen(world_coords.0).extend(depth_scale);
         transform.scale = Vec3::splat(depth_scale);
+    }
+}
+
+#[derive(Component)]
+pub struct WorldPolyline {
+    segments: Vec<(Vec3, Vec3)>,
+}
+
+fn draw_world_polyline_system(
+    view: Res<CameraView>,
+    mut q_line: Query<(&mut Path, &WorldPolyline, &WorldPosition)>,
+) {
+    for (mut path, polyline, center) in q_line.iter_mut() {
+        let mut builder = PathBuilder::new();
+        for &(p0, p1) in &polyline.segments {
+            builder.move_to(view.to_screen(center.0 + p0));
+            builder.line_to(view.to_screen(center.0 + p1));
+        }
+        *path = builder.build();
     }
 }
 
@@ -105,16 +91,3 @@ fn sync_physics_coords(mut query: Query<(&mut WorldPosition, &RigidBodyPositionC
         coords.0 = body_position.position.translation.into();
     }
 }
-
-// fn sync_shadow_position_system(
-//     mut shadow_query: Query<(&mut Shadow, &mut WorldPosition, &mut WorldSprite)>,
-//     parent_query: Query<&WorldPosition, Without<Shadow>>,
-// ) {
-//     for (shadow, mut shadow_position, mut sprite) in shadow_query.iter_mut() {
-//         if let Ok(parent_position) = parent_query.get(shadow.parent) {
-//             *shadow_position = *parent_position;
-//             shadow_position.0.y += 0.01;
-//             shadow_position.0.z = 0.;
-//         }
-//     }
-// }

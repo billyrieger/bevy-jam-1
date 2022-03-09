@@ -2,11 +2,11 @@ use crate::AppState;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use super::ball::{SpawnBallEvent, BallBouncesSinceHit, GameBall, GameBallShadow};
-use super::court::{SpawnCourtEvent};
-use super::player::{SpawnPlayerEvent, Player};
+use super::ball::{BallBouncesSinceHit, GameBall, GameBallShadow, SpawnBallEvent};
+use super::court::SpawnCourtEvent;
+use super::player::{Player, SpawnPlayerEvent};
 use super::ui::ResultsText;
-use super::world::{WorldPosition, Shadow};
+use super::world::{Shadow, WorldPosition};
 pub(crate) struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
@@ -18,7 +18,6 @@ impl Plugin for LevelPlugin {
             .add_system_set(SystemSet::on_enter(AppState::InGame).with_system(setup_scene))
             .add_system_set(
                 SystemSet::on_update(AppState::InGame)
-                    // .with_system(reset_scene_system)
                     .with_system(clear_scene_system)
                     .with_system(update_score_system),
             );

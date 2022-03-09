@@ -1,16 +1,20 @@
-use super::world::{CameraView, WorldPosition};
-use crate::{AppState, WORLD_SCALE};
-use bevy::prelude::*;
-use bevy_prototype_lyon::prelude::*;
+use crate::prelude::*;
 
 pub struct CourtPlugin;
 
 impl Plugin for CourtPlugin {
     fn build(&self, app: &mut App) {
         app.add_system_set(SystemSet::on_enter(AppState::InGame).with_system(spawn_court_system))
-            .add_system_set(SystemSet::on_update(AppState::InGame).with_system(draw_court_system));
+            .add_system_set(
+                SystemSet::on_update(AppState::InGame)
+                    // .with_system(draw_court_system)
+                    .with_system(draw_court_outline_system)
+                    .with_system(draw_court_surface_system),
+            );
     }
 }
+
+const FEET_TO_METERS: f32 = 0.3048;
 
 #[derive(Component)]
 struct CourtDimensions {
@@ -23,19 +27,44 @@ struct CourtDimensions {
 impl Default for CourtDimensions {
     fn default() -> Self {
         Self {
-            net_to_baseline: 39.,
-            net_to_service_line: 21.,
-            center_to_sideline: 13.5,
-            alley_width: 4.5,
+            net_to_baseline: 39. * FEET_TO_METERS,
+            net_to_service_line: 21. * FEET_TO_METERS,
+            center_to_sideline: 13.5 * FEET_TO_METERS,
+            alley_width: 4.5 * FEET_TO_METERS,
         }
     }
 }
 
-pub struct SpawnCourtEvent;
+impl CourtDimensions {
+    fn outline_segments(&self) -> Vec<(Vec3, Vec3)> {
+        let baseline = self.net_to_baseline * Vec3::Z;
+        let service_line = self.net_to_service_line * Vec3::Z;
+        let sideline = self.center_to_sideline * Vec3::X;
+        let alley = sideline + self.alley_width * Vec3::X;
+        [
+            // net line
+            (-alley, alley),
+            // near & far baselines
+            (-alley + baseline, alley + baseline),
+            (-alley - baseline, alley - baseline),
+            // near & far service lines
+            (-sideline + service_line, sideline + service_line),
+            (sideline - baseline, sideline + baseline),
+            // right & left alleys
+            (alley - baseline, alley + baseline),
+            (-alley - baseline, -alley + baseline),
+            // right & left sidelines
+            (-sideline - baseline, -sideline + baseline),
+            (-sideline - service_line, sideline - service_line),
+            // center service line
+            (-service_line, service_line),
+        ]
+        .to_vec()
+    }
+}
 
 #[derive(Component)]
-struct Court {
-    dimensions: CourtDimensions,
+struct CourtData {
     ground: Entity,
     outline: Entity,
     surface: Entity,
@@ -61,6 +90,7 @@ fn spawn_court_system(mut commands: Commands) {
             }),
             Transform::default(),
         ))
+        .insert(CourtSurface)
         .id();
     let outline_entity = commands
         .spawn_bundle(GeometryBuilder::build_as(
@@ -73,12 +103,12 @@ fn spawn_court_system(mut commands: Commands) {
     commands
         .spawn()
         .insert(WorldPosition(Vec3::ZERO))
-        .insert(Court {
+        .insert(CourtData {
             outline: outline_entity,
             surface: surface_entity,
             ground: ground_entity,
-            dimensions: CourtDimensions::default(),
         })
+        .insert(CourtDimensions::default())
         .add_child(outline_entity);
 }
 
@@ -88,32 +118,37 @@ struct Ground;
 #[derive(Component)]
 struct CourtOutline;
 
+fn draw_court_outline_system(
+    view: Res<CameraView>,
+    q_court: Query<(&CourtData, &CourtDimensions)>,
+    mut q_outline: Query<&mut Path, With<CourtOutline>>,
+) {
+    for (court, dimensions) in q_court.iter() {
+        let mut outline_path = q_outline
+            .get_mut(court.outline)
+            .expect("outline entity not found");
+        let mut builder = PathBuilder::new();
+        for (p0, p1) in dimensions.outline_segments() {
+            builder.move_to(view.to_screen(p0));
+            builder.line_to(view.to_screen(p1));
+        }
+        *outline_path = builder.build();
+    }
+}
+
 #[derive(Component)]
 struct CourtSurface;
 
-fn draw_court_system(
+fn draw_court_surface_system(
     view: Res<CameraView>,
-    q_court: Query<(&Court, &WorldPosition)>,
-    mut q_paths: Query<&mut Path>,
+    q_court: Query<(&CourtData, &CourtDimensions, &WorldPosition)>,
+    mut q_surfaces: Query<&mut Path, With<CourtSurface>>,
 ) {
-    for (court, _court_center) in q_court.iter() {
-        // draw the ground
-        let mut ground_path = q_paths
-            .get_mut(court.ground)
-            .expect("ground entity not found");
-        let horizon_line = view.position.y * WORLD_SCALE;
-        let rect = shapes::Rectangle {
-            extents: Vec2::new(320., 500.),
-            origin: RectangleOrigin::CustomCenter(Vec2::new(0., horizon_line - 250.)),
-        };
-        *ground_path = ShapePath::new().add(&rect).build();
+    for (court, dimensions, _court_center) in q_court.iter() {
+        let baseline = dimensions.net_to_baseline * Vec3::Z;
+        let alley = (dimensions.center_to_sideline + dimensions.alley_width) * Vec3::X;
 
-        let baseline = court.dimensions.net_to_baseline * Vec3::Z;
-        let service_line = court.dimensions.net_to_service_line * Vec3::Z;
-        let sideline = court.dimensions.center_to_sideline * Vec3::X;
-        let alley = sideline + court.dimensions.alley_width * Vec3::X;
-
-        let mut surface_path = q_paths
+        let mut surface_path = q_surfaces
             .get_mut(court.surface)
             .expect("surface entity not found");
         let surface_corners = [
@@ -129,35 +164,5 @@ fn draw_court_system(
                 closed: true,
             })
             .build();
-
-        let mut outline_path = q_paths
-            .get_mut(court.outline)
-            .expect("outline entity not found");
-
-        let segment_endpoints = [
-            // net line
-            (-alley, alley),
-            // near & far baselines
-            (-alley + baseline, alley + baseline),
-            (-alley - baseline, alley - baseline),
-            // near & far service lines
-            (-sideline + service_line, sideline + service_line),
-            (sideline - baseline, sideline + baseline),
-            // right & left alleys
-            (alley - baseline, alley + baseline),
-            (-alley - baseline, -alley + baseline),
-            // right & left sidelines
-            (-sideline - baseline, -sideline + baseline),
-            (-sideline - service_line, sideline - service_line),
-            // center service line
-            (-service_line, service_line),
-        ];
-
-        let mut path = PathBuilder::new();
-        for (p0, p1) in segment_endpoints {
-            path.move_to(view.to_screen(p0));
-            path.line_to(view.to_screen(p1));
-        }
-        *outline_path = path.build();
     }
 }
