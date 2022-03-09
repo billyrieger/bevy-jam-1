@@ -36,12 +36,12 @@ impl Default for CourtDimensions {
 }
 
 impl CourtDimensions {
-    fn outline_segments(&self) -> Vec<(Vec3, Vec3)> {
+    fn court_outline(&self) -> WorldPolyline {
         let baseline = self.net_to_baseline * Vec3::Z;
         let service_line = self.net_to_service_line * Vec3::Z;
         let sideline = self.center_to_sideline * Vec3::X;
         let alley = sideline + self.alley_width * Vec3::X;
-        [
+        let segments = [
             // net line
             (-alley, alley),
             // near & far baselines
@@ -58,8 +58,10 @@ impl CourtDimensions {
             (-sideline - service_line, sideline - service_line),
             // center service line
             (-service_line, service_line),
-        ]
-        .to_vec()
+        ];
+        WorldPolyline {
+            segments: segments.to_vec(),
+        }
     }
 }
 
@@ -98,6 +100,7 @@ fn spawn_court_system(mut commands: Commands) {
             DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.)),
             Transform::default(),
         ))
+        .insert_bundle((WorldPosition::default(), WorldPolyline::default()))
         .insert(CourtOutline)
         .id();
     commands
@@ -121,18 +124,13 @@ struct CourtOutline;
 fn draw_court_outline_system(
     view: Res<CameraView>,
     q_court: Query<(&CourtData, &CourtDimensions)>,
-    mut q_outline: Query<&mut Path, With<CourtOutline>>,
+    mut q_outline: Query<&mut WorldPolyline, With<CourtOutline>>,
 ) {
     for (court, dimensions) in q_court.iter() {
-        let mut outline_path = q_outline
+        let mut outline = q_outline
             .get_mut(court.outline)
             .expect("outline entity not found");
-        let mut builder = PathBuilder::new();
-        for (p0, p1) in dimensions.outline_segments() {
-            builder.move_to(view.to_screen(p0));
-            builder.line_to(view.to_screen(p1));
-        }
-        *outline_path = builder.build();
+        *outline = dimensions.court_outline();
     }
 }
 

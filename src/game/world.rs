@@ -56,9 +56,9 @@ fn world_position_sync_system(
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct WorldPolyline {
-    segments: Vec<(Vec3, Vec3)>,
+    pub segments: Vec<(Vec3, Vec3)>,
 }
 
 fn draw_world_polyline_system(
