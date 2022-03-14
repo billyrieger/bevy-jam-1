@@ -42,7 +42,7 @@ fn main() {
         .insert_resource(WindowDescriptor {
             width: BG_WIDTH,
             height: BG_HEIGHT,
-            scale_factor_override: Some(2.),
+            scale_factor_override: Some(3.),
             // resizable: false,
             vsync: true,
             ..Default::default()

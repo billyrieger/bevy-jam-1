@@ -45,7 +45,7 @@ fn spawn_player_system(
     commands
         .spawn_bundle((Player::User, PlayerState::Idle, speed, PlayerFacing::Right))
         .insert_bundle((
-            WorldPosition(Vec3::new(0., 0.75, 12.)),
+            WorldPosition(Vec3::new(0., 0.75, -12.)),
             WorldPositionSync,
             WorldSprite {
                 base: Vec2::new(8., -10.5),
