@@ -1,11 +1,10 @@
 #![feature(array_windows, try_blocks)]
 
 use bevy::prelude::*;
-use std::time::Duration;
 
 mod prelude {
-    pub use crate::game::world::{CameraView, WorldPolyline, WorldPosition, WorldPositionSync};
-    pub use crate::{AppState, WORLD_SCALE};
+    pub use crate::game::world::*;
+    pub use crate::{default, AppState, WORLD_SCALE};
     pub use bevy::prelude::*;
     pub use bevy_prototype_lyon::prelude::*;
     pub use bevy_rapier3d::prelude::*;
@@ -28,7 +27,7 @@ const BG_WIDTH: f32 = 320.;
 const BG_HEIGHT: f32 = 180.;
 pub const WORLD_SCALE: f32 = 12.;
 
-fn default<T: Default>() -> T {
+pub fn default<T: Default>() -> T {
     Default::default()
 }
 

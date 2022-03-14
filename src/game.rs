@@ -2,10 +2,10 @@ use bevy::prelude::*;
 
 // mod animation;
 // mod ball;
-mod court;
 // mod level;
-// mod player;
 // mod ui;
+pub mod court;
+pub mod player;
 pub mod world;
 
 pub struct GamePlugin;
@@ -17,7 +17,7 @@ impl Plugin for GamePlugin {
             // .add_plugin(ui::UiPlugin)
             // .add_plugin(ball::BallPlugin)
             .add_plugin(court::CourtPlugin)
-            // .add_plugin(player::PlayerPlugin)
+            .add_plugin(player::PlayerPlugin)
             // .add_plugin(animation::AnimationPlugin)
             ;
     }

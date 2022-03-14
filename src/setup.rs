@@ -10,18 +10,16 @@ const TEXTURES: &[&str] = &["textures/player.png"];
 pub struct SetupPlugin;
 
 impl Plugin for SetupPlugin {
-    fn build(&self, mut app: &mut App) {
-        app = app
-            .add_plugins(DefaultPlugins)
+    fn build(&self, app: &mut App) {
+        app.add_plugins(DefaultPlugins)
             .add_plugin(LogDiagnosticsPlugin::default())
             .add_plugin(bevy_rapier3d::physics::RapierPhysicsPlugin::<NoUserData>::default())
             // .add_plugin(bevy_inspector_egui::WorldInspectorPlugin::default())
             .add_plugin(ShapePlugin)
             .init_resource::<ResourceHandles>()
-            .add_system(bevy::input::system::exit_on_esc_system)
-            .add_system_set(SystemSet::on_enter(AppState::Loading).with_system(setup))
+            .add_system_set(SystemSet::on_enter(AppState::Loading).with_system(setup_system))
             .add_system_set(
-                SystemSet::on_update(AppState::Loading).with_system(check_resource_loading),
+                SystemSet::on_update(AppState::Loading).with_system(check_resource_loading_system),
             );
         #[cfg(not(target = "wasm32"))]
         app.add_system(bevy::input::system::exit_on_esc_system);
@@ -39,9 +37,9 @@ struct MainCamera;
 #[derive(Component)]
 struct UiCamera;
 
-fn setup(
+fn setup_system(
     mut commands: Commands,
-    mut texture_handles: ResMut<ResourceHandles>,
+    mut resource_handles: ResMut<ResourceHandles>,
     asset_server: Res<AssetServer>,
 ) {
     commands
@@ -51,7 +49,7 @@ fn setup(
         .spawn_bundle(UiCameraBundle::default())
         .insert(UiCamera);
 
-    texture_handles.0.extend(
+    resource_handles.0.extend(
         std::iter::empty()
             .chain(FONTS.iter().copied())
             .chain(TEXTURES.iter().copied())
@@ -59,7 +57,7 @@ fn setup(
     );
 }
 
-fn check_resource_loading(
+fn check_resource_loading_system(
     mut state: ResMut<State<AppState>>,
     resource_handles: ResMut<ResourceHandles>,
     asset_server: Res<AssetServer>,

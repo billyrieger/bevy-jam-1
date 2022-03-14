@@ -7,10 +7,11 @@ impl Plugin for WorldPlugin {
         app.insert_resource(CameraView::default());
         app.add_system_set(
             SystemSet::on_update(AppState::InGame)
-                .with_system(world_position_sync_system)
-                .with_system(draw_world_polyline_system)
+                .with_system(polyline_path_system)
+                .with_system(polygon_path_system)
                 .with_system(sync_physics_coords),
-        );
+        )
+        .add_system_to_stage(CoreStage::PostUpdate, world_position_sync_system);
     }
 }
 
@@ -61,7 +62,7 @@ pub struct WorldPolyline {
     pub segments: Vec<(Vec3, Vec3)>,
 }
 
-fn draw_world_polyline_system(
+fn polyline_path_system(
     view: Res<CameraView>,
     mut q_line: Query<(&mut Path, &WorldPolyline, &WorldPosition)>,
 ) {
@@ -76,14 +77,32 @@ fn draw_world_polyline_system(
 }
 
 #[derive(Component, Default)]
-pub struct WorldSprite {
-    pub base: Vec2,
+pub struct WorldPolygon {
+    pub corners: Vec<Vec3>,
 }
 
-#[derive(Component)]
-pub struct Shadow {
-    pub parent: Entity,
-    pub scale: f32,
+fn polygon_path_system(
+    view: Res<CameraView>,
+    mut q_polygon: Query<(&mut Path, &WorldPolygon, &WorldPosition)>,
+) {
+    for (mut path, polygon, center) in q_polygon.iter_mut() {
+        let points = polygon
+            .corners
+            .iter()
+            .map(|&p| view.to_screen(center.0 + p))
+            .collect();
+        *path = ShapePath::new()
+            .add(&shapes::Polygon {
+                points,
+                closed: true,
+            })
+            .build();
+    }
+}
+
+#[derive(Component, Default)]
+pub struct WorldSprite {
+    pub base: Vec2,
 }
 
 fn sync_physics_coords(mut query: Query<(&mut WorldPosition, &RigidBodyPositionComponent)>) {
