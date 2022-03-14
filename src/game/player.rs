@@ -45,7 +45,7 @@ fn spawn_player_system(
     commands
         .spawn_bundle((Player::User, PlayerState::Idle, speed, PlayerFacing::Right))
         .insert_bundle((
-            WorldPosition::default(),
+            WorldPosition(Vec3::new(0., 0.75, 12.)),
             WorldPositionSync,
             WorldSprite {
                 base: Vec2::new(8., -10.5),
@@ -54,7 +54,11 @@ fn spawn_player_system(
         ))
         .insert_bundle(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle.clone(),
-            ..Default::default()
+            sprite: TextureAtlasSprite {
+                index: 4,
+                ..default()
+            },
+            ..default()
         });
 }
 

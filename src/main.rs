@@ -23,9 +23,9 @@ const PLAYER_SPEED: f32 = 30.;
 const PLAYER_CHARGING_SPEED_FACTOR: f32 = 0.4;
 const PLAYER_SWING_COOLDOWN_SECS: f32 = 0.5;
 
-const BG_WIDTH: f32 = 320.;
-const BG_HEIGHT: f32 = 180.;
-pub const WORLD_SCALE: f32 = 12.;
+const BG_WIDTH: f32 = 320. *1.5;
+const BG_HEIGHT: f32 = 180. *1.5;
+pub const WORLD_SCALE: f32 = 16.;
 
 pub fn default<T: Default>() -> T {
     Default::default()
@@ -42,7 +42,7 @@ fn main() {
         .insert_resource(WindowDescriptor {
             width: BG_WIDTH,
             height: BG_HEIGHT,
-            scale_factor_override: Some(1.),
+            scale_factor_override: Some(2.),
             // resizable: false,
             vsync: true,
             ..Default::default()
