@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 mod prelude {
     pub use crate::game::world::*;
-    pub use crate::{default, AppState, WORLD_SCALE};
+    pub use crate::{default, AppState};
     pub use bevy::prelude::*;
     pub use bevy_prototype_lyon::prelude::*;
     pub use bevy_rapier3d::prelude::*;
@@ -19,13 +19,8 @@ const KEY_CODE_LEFT: KeyCode = KeyCode::Left;
 const KEY_CODE_RIGHT: KeyCode = KeyCode::Right;
 const KEY_CODE_ACTION: KeyCode = KeyCode::Space;
 
-const PLAYER_SPEED: f32 = 30.;
-const PLAYER_CHARGING_SPEED_FACTOR: f32 = 0.4;
-const PLAYER_SWING_COOLDOWN_SECS: f32 = 0.5;
-
-const BG_WIDTH: f32 = 320. *1.5;
-const BG_HEIGHT: f32 = 180. *1.5;
-pub const WORLD_SCALE: f32 = 16.;
+const BG_WIDTH: f32 = 480.;
+const BG_HEIGHT: f32 = 270.;
 
 pub fn default<T: Default>() -> T {
     Default::default()

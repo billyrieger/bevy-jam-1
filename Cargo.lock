@@ -211,6 +211,7 @@ dependencies = [
  "bevy_easings",
  "bevy_prototype_lyon",
  "bevy_rapier3d",
+ "once_cell",
  "rand",
 ]
 

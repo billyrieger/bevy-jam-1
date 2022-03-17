@@ -1,10 +1,12 @@
 use crate::prelude::*;
 
+pub const PIXELS_PER_METER: f32 = 16.;
+
 pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CameraView::default());
+        app.init_resource::<CameraView>();
         app.add_system_set(
             SystemSet::on_update(AppState::InGame)
                 .with_system(polyline_path_system)
@@ -15,7 +17,7 @@ impl Plugin for WorldPlugin {
     }
 }
 
-// Camera points in the negative z direction with the image plane at z=0
+// Camera points in the negative z direction and the scale factor at z=0 is 1.
 #[derive(Debug)]
 pub struct CameraView {
     pub position: Vec3,
@@ -24,19 +26,21 @@ pub struct CameraView {
 impl Default for CameraView {
     fn default() -> Self {
         Self {
-            position: Vec3::new(0., 5., 24.),
+            position: Vec3::new(0., 27., 58.),
         }
     }
 }
 
 impl CameraView {
     pub fn depth_scale(&self, world_pos: Vec3) -> f32 {
+        // Note: the scale is 1 when world_pos.z is 0.
         self.position.z / (self.position.z - world_pos.z)
     }
 
     pub fn to_screen(&self, world_pos: Vec3) -> Vec2 {
         let depth_scale = self.depth_scale(world_pos);
-        (self.position + (world_pos - self.position) * depth_scale).truncate() * WORLD_SCALE
+        let world_screen = self.position + (world_pos - self.position) * depth_scale;
+        world_screen.truncate() * PIXELS_PER_METER
     }
 }
 

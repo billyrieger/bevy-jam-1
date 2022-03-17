@@ -1,65 +1,43 @@
+use std::time::Duration;
+
+use bevy::render::render_resource::FilterMode;
+use bevy::utils::HashMap;
+
 use crate::prelude::*;
+use crate::setup::TextureAtlasHandles;
+use crate::{KEY_CODE_DOWN, KEY_CODE_LEFT, KEY_CODE_RIGHT, KEY_CODE_UP};
 
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(
-            SystemSet::on_enter(AppState::InGame).with_system(spawn_player_system))
-        .add_system_set(
-            SystemSet::on_update(AppState::InGame)
-                // .with_system(user_movement_system)
-                // .with_system(user_begin_charge_system)
-                // .with_system(user_release_charge_system)
-                // .with_system(opponent_movement_system)
-                // .with_system(opponent_hit_system)
-                // .with_system(player_spawn_system)
-                // .with_system(tick_swing_cooldown_system)
-                // .with_system(flip_sprite_facing_system)
-                // .with_system(turn_player_toward_ball)
-                // .with_system(set_player_speed_system)
-                // .with_system(update_animation_system),
-        );
+        app.add_system_set(SystemSet::on_enter(AppState::InGame).with_system(spawn_player_system))
+            .add_system_set(
+                SystemSet::on_update(AppState::InGame)
+                    .with_system(user_movement_system)
+                    .with_system(animation_update_system),
+            );
+        // .with_system(user_movement_system)
+        // .with_system(user_begin_charge_system)
+        // .with_system(user_release_charge_system)
+        // .with_system(opponent_movement_system)
+        // .with_system(opponent_hit_system)
+        // .with_system(player_spawn_system)
+        // .with_system(tick_swing_cooldown_system)
+        // .with_system(flip_sprite_facing_system)
+        // .with_system(turn_player_toward_ball)
+        // .with_system(set_player_speed_system)
+        // .with_system(update_animation_system),
     }
 }
 
 #[derive(Bundle)]
 pub struct PlayerBundle {
     player: Player,
-    speed: PlayerSpeed,
-}
-
-fn spawn_player_system(
-    mut commands: Commands,
-
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-) {
-    let player_texture_handle = asset_server.get_handle("textures/player.png");
-    let player_texture_atlas =
-        TextureAtlas::from_grid(player_texture_handle, Vec2::new(24.0, 24.0), 4, 8);
-    let player_texture_atlas_handle = texture_atlases.add(player_texture_atlas);
-
-    let speed = PlayerSpeed(30.);
-    let texture_atlas_handle = player_texture_atlas_handle.clone();
-    commands
-        .spawn_bundle((Player::User, PlayerState::Idle, speed, PlayerFacing::Right))
-        .insert_bundle((
-            WorldPosition(Vec3::new(0., 0.75, -12.)),
-            WorldPositionSync,
-            WorldSprite {
-                base: Vec2::new(8., -10.5),
-                ..Default::default()
-            },
-        ))
-        .insert_bundle(SpriteSheetBundle {
-            texture_atlas: texture_atlas_handle.clone(),
-            sprite: TextureAtlasSprite {
-                index: 4,
-                ..default()
-            },
-            ..default()
-        });
+    speed: Speed,
+    animation_state: PlayerState,
+    facing: Facing,
+    racket_hand: RacketHand,
 }
 
 #[derive(Component)]
@@ -69,24 +47,35 @@ pub enum Player {
 }
 
 #[derive(Component)]
-struct PlayerSpeed(f32);
+struct Speed(f32);
 
-#[derive(Component, Clone)]
+#[derive(Component, PartialEq, Eq, Hash)]
 pub enum PlayerState {
+    ServeReady,
+    ServeToss,
+    ServeHit,
     Idle,
     Run,
     Charge,
     Swing,
 }
 
-#[derive(Component)]
-struct PlayerDirection(Vec3);
+use super::animation::{Animation, PlayerFrameData};
 
 #[derive(Component)]
-enum PlayerFacing {
+pub enum Facing {
+    Away,
+    Toward,
+}
+
+#[derive(Component)]
+pub enum RacketHand {
     Right,
     Left,
 }
+
+#[derive(Component)]
+struct PlayerDirection(Vec3);
 
 #[derive(Component)]
 struct SwingCooldown(Timer);
@@ -95,61 +84,109 @@ struct SwingCooldown(Timer);
 struct UserControlled;
 
 #[derive(Component)]
+struct User;
+
+#[derive(Component)]
 struct Opponent;
 
 #[derive(Component)]
 struct CpuControlled;
 
-// fn update_animation_system(
-//     mut query: Query<(&Player, &PlayerState, &mut SpriteAnimation), Changed<PlayerState>>,
-// ) {
-//     for (player, state, mut animation) in query.iter_mut() {
-//         *animation = match (player, state) {
-//             (Player::User, PlayerState::Idle) => SpriteAnimation::player_idle(),
-//             (Player::User, PlayerState::Run) => SpriteAnimation::player_run(),
-//             (Player::User, PlayerState::Charge) => SpriteAnimation::player_charge(),
-//             (Player::User, PlayerState::Swing) => SpriteAnimation::player_swing(),
-//             (Player::Opponent, PlayerState::Idle) => SpriteAnimation::opponent_idle(),
-//             (Player::Opponent, PlayerState::Run) => SpriteAnimation::opponent_run(),
-//             (Player::Opponent, PlayerState::Charge) => SpriteAnimation::opponent_charge(),
-//             (Player::Opponent, PlayerState::Swing) => SpriteAnimation::opponent_swing(),
-//         };
-//     }
-// }
+fn spawn_player_system(
+    animations: Res<PlayerFrameData>,
+    mut commands: Commands,
+    texture_atlas_handles: Res<TextureAtlasHandles>,
+    asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let player_image: Handle<Image> = asset_server.load("textures/player.png");
+    images
+        .get_mut(&player_image)
+        .unwrap()
+        .sampler_descriptor
+        .mag_filter = FilterMode::Linear;
+    images
+        .get_mut(&player_image)
+        .unwrap()
+        .sampler_descriptor
+        .min_filter = FilterMode::Linear;
+    commands
+        .spawn_bundle(PlayerBundle {
+            player: Player::User,
+            speed: Speed(10.),
+            animation_state: PlayerState::Idle,
+            facing: Facing::Away,
+            racket_hand: RacketHand::Right,
+        })
+        .insert(User)
+        .insert(animations.0[&PlayerState::Idle].clone())
+        .insert_bundle((
+            WorldPosition(Vec3::new(0., 0.75, 12.)),
+            WorldPositionSync,
+            // WorldSprite {
+            //     base: Vec2::new(8., -10.5),
+            //     ..Default::default()
+            // },
+        ))
+        .insert_bundle(SpriteSheetBundle {
+            texture_atlas: texture_atlas_handles.player.clone(),
+            sprite: TextureAtlasSprite {
+                index: 4,
+                ..default()
+            },
+            ..default()
+        });
+}
 
-// fn user_movement_system(
-//     time: Res<Time>,
-//     keyboard: Res<Input<KeyCode>>,
-//     mut query: Query<(&mut PlayerState, &PlayerSpeed, &mut WorldPosition), With<UserControlled>>,
-// ) {
-//     for (mut state, speed, mut position) in query.iter_mut() {
-//         let mut direction = Vec3::ZERO;
-//         if keyboard.pressed(KEY_CODE_RIGHT) {
-//             direction += Vec3::X;
-//         }
-//         if keyboard.pressed(KEY_CODE_LEFT) {
-//             direction -= Vec3::X;
-//         }
-//         if keyboard.pressed(KEY_CODE_UP) {
-//             direction -= Vec3::Z;
-//         }
-//         if keyboard.pressed(KEY_CODE_DOWN) {
-//             direction += Vec3::Z;
-//         }
-//         if direction.length() > 0. {
-//             position.0 += direction.normalize() * speed.0 * time.delta().as_secs_f32();
-//             // don't change state while charging or if it's already set
-//             if matches!(*state, PlayerState::Idle) {
-//                 *state = PlayerState::Run;
-//             }
-//         } else {
-//             // don't change state while charging or if it's already set
-//             if matches!(*state, PlayerState::Run) {
-//                 *state = PlayerState::Idle;
-//             }
-//         }
-//     }
-// }
+fn animation_update_system(
+    animations: Res<PlayerFrameData>,
+    mut query: Query<(&Player, &PlayerState, &mut Animation), Changed<PlayerState>>,
+) {
+    for (player, state, mut animation) in query.iter_mut() {
+        *animation = match (player, state) {
+            (Player::User, PlayerState::Idle) => animations.0[&PlayerState::Idle].clone(),
+            (Player::User, PlayerState::Run) => animations.0[&PlayerState::Run].clone(),
+            _ => todo!(),
+        };
+    }
+}
+
+fn user_movement_system(
+    time: Res<Time>,
+    keyboard: Res<Input<KeyCode>>,
+    mut query: Query<(&mut PlayerState, &Speed, &mut WorldPosition), With<User>>,
+) {
+    for (mut state, speed, mut position) in query.iter_mut() {
+        if matches!(*state, PlayerState::Swing) {
+            break;
+        }
+        let mut direction = Vec3::ZERO;
+        if keyboard.pressed(KEY_CODE_RIGHT) {
+            direction += Vec3::X;
+        }
+        if keyboard.pressed(KEY_CODE_LEFT) {
+            direction -= Vec3::X;
+        }
+        if keyboard.pressed(KEY_CODE_UP) {
+            direction -= Vec3::Z;
+        }
+        if keyboard.pressed(KEY_CODE_DOWN) {
+            direction += Vec3::Z;
+        }
+        if direction.length() > 0. {
+            position.0 += direction.normalize() * speed.0 * time.delta().as_secs_f32();
+            // don't change state while charging or if it's already set
+            if matches!(*state, PlayerState::Idle) {
+                *state = PlayerState::Run;
+            }
+        } else {
+            // don't change state while charging or if it's already set
+            if matches!(*state, PlayerState::Run) {
+                *state = PlayerState::Idle;
+            }
+        }
+    }
+}
 
 // fn opponent_movement_system(
 //     time: Res<Time>,

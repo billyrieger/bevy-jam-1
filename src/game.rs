@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 
-// mod animation;
 // mod ball;
 // mod level;
 // mod ui;
+pub mod animation;
 pub mod court;
 pub mod player;
 pub mod world;
@@ -18,7 +18,7 @@ impl Plugin for GamePlugin {
             // .add_plugin(ball::BallPlugin)
             .add_plugin(court::CourtPlugin)
             .add_plugin(player::PlayerPlugin)
-            // .add_plugin(animation::AnimationPlugin)
+            .add_plugin(animation::AnimationPlugin)
             ;
     }
 }

@@ -9,8 +9,8 @@ impl Plugin for CourtPlugin {
         app.add_system_set(SystemSet::on_enter(AppState::InGame).with_system(spawn_court_system))
             .add_system_set(
                 SystemSet::on_update(AppState::InGame)
-                    .with_system(draw_court_outline_system)
-                    .with_system(draw_court_surface_system),
+                    .with_system(update_court_outline_system)
+                    .with_system(update_court_surface_system),
             );
     }
 }
@@ -22,7 +22,7 @@ struct CourtDimensions {
     net_to_baseline: f32,
     net_to_service_line: f32,
     center_to_sideline: f32,
-    alley_width: f32,
+    center_to_alley: f32,
 }
 
 impl Default for CourtDimensions {
@@ -31,7 +31,7 @@ impl Default for CourtDimensions {
             net_to_baseline: 39. * FEET_TO_METERS,
             net_to_service_line: 21. * FEET_TO_METERS,
             center_to_sideline: 13.5 * FEET_TO_METERS,
-            alley_width: 4.5 * FEET_TO_METERS,
+            center_to_alley: 18. * FEET_TO_METERS,
         }
     }
 }
@@ -39,7 +39,7 @@ impl Default for CourtDimensions {
 impl CourtDimensions {
     fn court_surface_path(&self) -> WorldPolygon {
         let baseline = self.net_to_baseline * Vec3::Z;
-        let alley = (self.center_to_sideline + self.alley_width) * Vec3::X;
+        let alley = self.center_to_alley * Vec3::X;
         let corners = [
             -alley + baseline,
             alley + baseline,
@@ -54,7 +54,7 @@ impl CourtDimensions {
         let baseline = self.net_to_baseline * Vec3::Z;
         let service_line = self.net_to_service_line * Vec3::Z;
         let sideline = self.center_to_sideline * Vec3::X;
-        let alley = sideline + self.alley_width * Vec3::X;
+        let alley = self.center_to_alley * Vec3::X;
         let segments = [
             // net line
             (-alley, alley),
@@ -78,70 +78,86 @@ impl CourtDimensions {
     }
 }
 
-#[derive(Component)]
-struct CourtData {
-    outline: Entity,
-    surface: Entity,
-}
-
-fn spawn_court_system(mut commands: Commands) {
-    let surface_entity = commands
-        .spawn_bundle(GeometryBuilder::build_as(
-            &shapes::Rectangle::default(),
-            DrawMode::Fill(FillMode {
-                color: Color::hex("366d00").unwrap(),
-                options: FillOptions::DEFAULT,
-            }),
-            Transform::default(),
-        ))
-        .insert_bundle((WorldPosition::default(), WorldPolygon::default()))
-        .insert(CourtSurface)
-        .id();
-    let outline_entity = commands
-        .spawn_bundle(GeometryBuilder::build_as(
-            &shapes::Rectangle::default(),
-            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.)),
-            Transform::default(),
-        ))
-        .insert_bundle((WorldPosition::default(), WorldPolyline::default()))
-        .insert(CourtOutline)
-        .id();
+fn spawn_court_system(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn()
-        .insert(WorldPosition(Vec3::ZERO))
-        .insert(CourtData {
-            outline: outline_entity,
-            surface: surface_entity,
-        })
-        .insert(CourtDimensions::default());
+        .insert_bundle((Transform::default(), GlobalTransform::default()))
+        .insert(CourtDimensions::default())
+        .with_children(|parent| {
+            parent
+                .spawn_bundle(GeometryBuilder::build_as(
+                    &shapes::Rectangle::default(),
+                    DrawMode::Fill(FillMode {
+                        color: Color::hex("7a9b00").unwrap(),
+                        options: FillOptions::DEFAULT,
+                    }),
+                    Transform::default(),
+                ))
+                .insert(WorldPosition::default())
+                .insert(WorldPolygon {
+                    corners: vec![
+                        Vec3::new(1000., 0., 28. - 0.1),
+                        Vec3::new(1000., 0., -1000.),
+                        Vec3::new(-1000., 0., -1000.),
+                        Vec3::new(-1000., 0., 28. - 0.1),
+                    ],
+                });
+            parent
+                .spawn_bundle(GeometryBuilder::build_as(
+                    &shapes::Rectangle::default(),
+                    DrawMode::Fill(FillMode {
+                        color: Color::hex("366d00").unwrap(),
+                        options: FillOptions::DEFAULT,
+                    }),
+                    Transform::default(),
+                ))
+                .insert_bundle((
+                    CourtSurface,
+                    WorldPosition::default(),
+                    WorldPolygon::default(),
+                ));
+            parent
+                .spawn_bundle(GeometryBuilder::build_as(
+                    &shapes::Rectangle::default(),
+                    DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.)),
+                    Transform::default(),
+                ))
+                .insert_bundle((WorldPosition::default(), WorldPolyline::default()))
+                .insert(CourtOutline);
+            parent
+                .spawn_bundle(SpriteBundle {
+                    texture: asset_server.load("textures/net.png"),
+                    ..default()
+                })
+                .insert(WorldPosition(Vec3::new(0., 0.5, 0.)))
+                .insert(WorldPositionSync);
+        });
 }
 
 #[derive(Component)]
 struct CourtOutline;
 
-fn draw_court_outline_system(
-    q_court: Query<(&CourtData, &CourtDimensions)>,
-    mut q_outline: Query<&mut WorldPolyline, With<CourtOutline>>,
+fn update_court_outline_system(
+    mut q_outline: Query<(&mut WorldPolyline, &Parent), With<CourtOutline>>,
+    q_court: Query<&CourtDimensions, Changed<CourtDimensions>>,
 ) {
-    for (court, dimensions) in q_court.iter() {
-        let mut outline = q_outline
-            .get_mut(court.outline)
-            .expect("outline entity not found");
-        *outline = dimensions.court_boundaries_path();
+    for (mut outline, parent) in q_outline.iter_mut() {
+        if let Ok(dimensions) = q_court.get(parent.0) {
+            *outline = dimensions.court_boundaries_path();
+        }
     }
 }
 
 #[derive(Component)]
 struct CourtSurface;
 
-fn draw_court_surface_system(
-    q_court: Query<(&CourtData, &CourtDimensions)>,
-    mut q_surface: Query<&mut WorldPolygon, With<CourtSurface>>,
+fn update_court_surface_system(
+    mut q_surface: Query<(&mut WorldPolygon, &Parent), With<CourtSurface>>,
+    q_court: Query<&CourtDimensions, Changed<CourtDimensions>>,
 ) {
-    for (court, dimensions) in q_court.iter() {
-        let mut polygon = q_surface
-            .get_mut(court.surface)
-            .expect("surface entity not found");
-        *polygon = dimensions.court_surface_path();
+    for (mut surface, parent) in q_surface.iter_mut() {
+        if let Ok(dimensions) = q_court.get(parent.0) {
+            *surface = dimensions.court_surface_path();
+        }
     }
 }

@@ -5,7 +5,11 @@ use bevy_prototype_lyon::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 const FONTS: &[&str] = &["fonts/Press_Start_2P/PressStart2P-Regular.ttf"];
-const TEXTURES: &[&str] = &["textures/player.png"];
+const TEXTURES: &[&str] = &[
+    "textures/player.png",
+    "textures/opponent.png",
+    "textures/net.png",
+];
 
 pub struct SetupPlugin;
 
@@ -16,7 +20,8 @@ impl Plugin for SetupPlugin {
             .add_plugin(bevy_rapier3d::physics::RapierPhysicsPlugin::<NoUserData>::default())
             // .add_plugin(bevy_inspector_egui::WorldInspectorPlugin::default())
             .add_plugin(ShapePlugin)
-            .init_resource::<ResourceHandles>()
+            .init_resource::<AllResourceHandles>()
+            .init_resource::<TextureAtlasHandles>()
             .add_system_set(SystemSet::on_enter(AppState::Loading).with_system(setup_system))
             .add_system_set(
                 SystemSet::on_update(AppState::Loading).with_system(check_resource_loading_system),
@@ -29,7 +34,12 @@ impl Plugin for SetupPlugin {
 // ====== Resources ======
 
 #[derive(Default)]
-struct ResourceHandles(Vec<HandleUntyped>);
+struct AllResourceHandles(Vec<HandleUntyped>);
+
+#[derive(Default)]
+pub struct TextureAtlasHandles {
+    pub player: Handle<TextureAtlas>,
+}
 
 #[derive(Component)]
 struct MainCamera;
@@ -39,8 +49,10 @@ struct UiCamera;
 
 fn setup_system(
     mut commands: Commands,
-    mut resource_handles: ResMut<ResourceHandles>,
     asset_server: Res<AssetServer>,
+    mut resource_handles: ResMut<AllResourceHandles>,
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut texture_atlas_handles: ResMut<TextureAtlasHandles>,
 ) {
     commands
         .spawn_bundle(OrthographicCameraBundle::new_2d())
@@ -51,15 +63,20 @@ fn setup_system(
 
     resource_handles.0.extend(
         std::iter::empty()
-            .chain(FONTS.iter().copied())
-            .chain(TEXTURES.iter().copied())
-            .map(|filename| asset_server.load_untyped(filename)),
+            .chain(FONTS.iter())
+            .chain(TEXTURES.iter())
+            .map(|&filename| asset_server.load_untyped(filename)),
     );
+
+    let player_texture_handle = asset_server.get_handle("textures/opponent.png");
+    let player_texture_atlas =
+        TextureAtlas::from_grid(player_texture_handle, Vec2::new(24.0, 24.0), 4, 8);
+    texture_atlas_handles.player = texture_atlases.add(player_texture_atlas);
 }
 
 fn check_resource_loading_system(
     mut state: ResMut<State<AppState>>,
-    resource_handles: ResMut<ResourceHandles>,
+    resource_handles: Res<AllResourceHandles>,
     asset_server: Res<AssetServer>,
 ) {
     let handle_ids = resource_handles.0.iter().map(|handle| handle.id);
