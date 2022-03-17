@@ -68,7 +68,7 @@ fn setup_system(
             .map(|&filename| asset_server.load_untyped(filename)),
     );
 
-    let player_texture_handle = asset_server.get_handle("textures/opponent.png");
+    let player_texture_handle = asset_server.get_handle("textures/player.png");
     let player_texture_atlas =
         TextureAtlas::from_grid(player_texture_handle, Vec2::new(24.0, 24.0), 4, 8);
     texture_atlas_handles.player = texture_atlases.add(player_texture_atlas);

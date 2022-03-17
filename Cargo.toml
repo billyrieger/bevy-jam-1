@@ -19,6 +19,7 @@ bevy_prototype_lyon = "0.4.0"
 bevy_rapier3d = "0.12.1"
 rand = "0.8.5"
 once_cell = "1.10.0"
+derive_more = "0.99.17"
 
 [profile.dev]
 incremental = true

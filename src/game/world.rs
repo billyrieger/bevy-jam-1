@@ -1,3 +1,5 @@
+use bevy_rapier3d::na::{Isometry3, UnitQuaternion};
+
 use crate::prelude::*;
 
 pub const PIXELS_PER_METER: f32 = 16.;
@@ -43,6 +45,8 @@ impl CameraView {
         world_screen.truncate() * PIXELS_PER_METER
     }
 }
+
+type WorldPos = Isometry3<f32>;
 
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct WorldPosition(pub Vec3);
