@@ -130,7 +130,7 @@ fn spawn_court_system(mut commands: Commands, asset_server: Res<AssetServer>) {
                     ..default()
                 })
                 .insert(WorldPosition(Vec3::new(0., 0.5, 0.)))
-                .insert(WorldPositionSync);
+                .insert(WorldPositionSync::default());
         });
 }
 

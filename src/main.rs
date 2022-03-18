@@ -18,6 +18,7 @@ const KEY_CODE_DOWN: KeyCode = KeyCode::Down;
 const KEY_CODE_LEFT: KeyCode = KeyCode::Left;
 const KEY_CODE_RIGHT: KeyCode = KeyCode::Right;
 const KEY_CODE_ACTION: KeyCode = KeyCode::Space;
+const KEY_CODE_SECONDARY: KeyCode = KeyCode::LShift;
 
 const BG_WIDTH: f32 = 480.;
 const BG_HEIGHT: f32 = 270.;

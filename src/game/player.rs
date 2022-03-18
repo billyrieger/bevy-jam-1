@@ -5,7 +5,7 @@ use bevy::utils::HashMap;
 
 use crate::prelude::*;
 use crate::setup::TextureAtlasHandles;
-use crate::{KEY_CODE_DOWN, KEY_CODE_LEFT, KEY_CODE_RIGHT, KEY_CODE_UP};
+use crate::{KEY_CODE_DOWN, KEY_CODE_LEFT, KEY_CODE_RIGHT, KEY_CODE_SECONDARY, KEY_CODE_UP};
 
 pub struct PlayerPlugin;
 
@@ -15,6 +15,8 @@ impl Plugin for PlayerPlugin {
             .add_system_set(
                 SystemSet::on_update(AppState::InGame)
                     .with_system(user_movement_system)
+                    .with_system(slow_user_movement_system)
+                    .with_system(flip_player_system)
                     .with_system(animation_update_system),
             );
         // .with_system(user_movement_system)
@@ -48,6 +50,11 @@ pub enum Player {
 
 #[derive(Component)]
 struct Speed(f32);
+
+impl Speed {
+    const USER_DEFAULT: Self = Self(10.);
+    const USER_SLOW: Self = Self(4.);
+}
 
 #[derive(Component, PartialEq, Eq, Hash)]
 pub enum PlayerState {
@@ -96,24 +103,11 @@ fn spawn_player_system(
     animations: Res<PlayerFrameData>,
     mut commands: Commands,
     texture_atlas_handles: Res<TextureAtlasHandles>,
-    asset_server: Res<AssetServer>,
-    mut images: ResMut<Assets<Image>>,
 ) {
-    let player_image: Handle<Image> = asset_server.load("textures/player.png");
-    images
-        .get_mut(&player_image)
-        .unwrap()
-        .sampler_descriptor
-        .mag_filter = FilterMode::Linear;
-    images
-        .get_mut(&player_image)
-        .unwrap()
-        .sampler_descriptor
-        .min_filter = FilterMode::Linear;
     commands
         .spawn_bundle(PlayerBundle {
             player: Player::User,
-            speed: Speed(10.),
+            speed: Speed::USER_DEFAULT,
             animation_state: PlayerState::Idle,
             facing: Facing::Away,
             racket_hand: RacketHand::Right,
@@ -121,12 +115,10 @@ fn spawn_player_system(
         .insert(User)
         .insert(animations.0[&PlayerState::Idle].clone())
         .insert_bundle((
-            WorldPosition(Vec3::new(0., 0.75, 12.)),
-            WorldPositionSync,
-            // WorldSprite {
-            //     base: Vec2::new(8., -10.5),
-            //     ..Default::default()
-            // },
+            WorldPosition::default(),
+            WorldPositionSync {
+                base: Vec2::new(0., -10.5),
+            },
         ))
         .insert_bundle(SpriteSheetBundle {
             texture_atlas: texture_atlas_handles.player.clone(),
@@ -151,14 +143,27 @@ fn animation_update_system(
     }
 }
 
+fn slow_user_movement_system(
+    keyboard: Res<Input<KeyCode>>,
+    mut query: Query<(&PlayerState, &mut Speed), With<User>>,
+) {
+    for (_state, mut speed) in query.iter_mut() {
+        *speed = if keyboard.pressed(KEY_CODE_SECONDARY) {
+            Speed::USER_SLOW
+        } else {
+            Speed::USER_DEFAULT
+        };
+    }
+}
+
 fn user_movement_system(
     time: Res<Time>,
     keyboard: Res<Input<KeyCode>>,
     mut query: Query<(&mut PlayerState, &Speed, &mut WorldPosition), With<User>>,
 ) {
     for (mut state, speed, mut position) in query.iter_mut() {
-        if matches!(*state, PlayerState::Swing) {
-            break;
+        if matches!(*state, PlayerState::Charge | PlayerState::Swing) {
+            continue;
         }
         let mut direction = Vec3::ZERO;
         if keyboard.pressed(KEY_CODE_RIGHT) {
@@ -184,6 +189,65 @@ fn user_movement_system(
             if matches!(*state, PlayerState::Run) {
                 *state = PlayerState::Idle;
             }
+        }
+    }
+}
+
+struct FlipTimer(Timer);
+
+impl Default for FlipTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(2., true))
+    }
+}
+
+fn flip_player_system(
+    keyboard: Res<Input<KeyCode>>,
+    mut query: Query<(&mut RacketHand, &mut TextureAtlasSprite), With<User>>,
+) {
+    if keyboard.any_just_pressed([KEY_CODE_LEFT, KEY_CODE_RIGHT])
+        && !keyboard.pressed(KEY_CODE_SECONDARY)
+    {
+        for (mut hand, mut sprite) in query.iter_mut() {
+            if keyboard.just_pressed(KEY_CODE_LEFT) && matches!(*hand, RacketHand::Right) {
+                *hand = RacketHand::Left;
+                sprite.flip_x = !sprite.flip_x;
+            } else if keyboard.just_pressed(KEY_CODE_RIGHT) && matches!(*hand, RacketHand::Left) {
+                *hand = RacketHand::Right;
+                sprite.flip_x = !sprite.flip_x;
+            }
+        }
+    }
+}
+
+// Note: not the same as a swing-voting US state.
+enum SwingState {
+    Charge,
+    Release
+}
+
+enum ServeState {
+    Ready,
+    Toss,
+    Hit,
+}
+
+enum State {
+    Idle,
+    Swing(SwingState),
+    Serve(ServeState),
+}
+
+fn input_system(keyboard: Res<Input<KeyCode>>, query: Query<&mut PlayerState>) {
+    for state in query.iter() {
+        match state {
+            PlayerState::ServeReady => todo!(),
+            PlayerState::ServeToss => todo!(),
+            PlayerState::ServeHit => todo!(),
+            PlayerState::Idle => todo!(),
+            PlayerState::Run => todo!(),
+            PlayerState::Charge => todo!(),
+            PlayerState::Swing => todo!(),
         }
     }
 }

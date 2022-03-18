@@ -46,21 +46,27 @@ impl CameraView {
     }
 }
 
-type WorldPos = Isometry3<f32>;
+#[derive(Component)]
+struct WorldObject {
+    position: WorldPosition,
+}
 
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct WorldPosition(pub Vec3);
 
-#[derive(Component)]
-pub struct WorldPositionSync;
+#[derive(Component, Default)]
+pub struct WorldPositionSync {
+    pub base: Vec2,
+}
 
 fn world_position_sync_system(
     camera_view: Res<CameraView>,
-    mut query: Query<(&mut Transform, &WorldPosition), With<WorldPositionSync>>,
+    mut query: Query<(&mut Transform, &WorldPosition, &WorldPositionSync)>,
 ) {
-    for (mut transform, world_coords) in query.iter_mut() {
+    for (mut transform, world_coords, sync) in query.iter_mut() {
         let depth_scale = camera_view.depth_scale(world_coords.0);
-        transform.translation = camera_view.to_screen(world_coords.0).extend(depth_scale);
+        transform.translation =
+            (camera_view.to_screen(world_coords.0) - sync.base).extend(depth_scale);
         transform.scale = Vec3::splat(depth_scale);
     }
 }
@@ -106,11 +112,6 @@ fn polygon_path_system(
             })
             .build();
     }
-}
-
-#[derive(Component, Default)]
-pub struct WorldSprite {
-    pub base: Vec2,
 }
 
 fn sync_physics_coords(mut query: Query<(&mut WorldPosition, &RigidBodyPositionComponent)>) {
