@@ -1,5 +1,4 @@
 use crate::AppState;
-use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -16,10 +15,10 @@ pub struct SetupPlugin;
 impl Plugin for SetupPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(DefaultPlugins)
-            .add_plugin(LogDiagnosticsPlugin::default())
-            .add_plugin(bevy_rapier3d::physics::RapierPhysicsPlugin::<NoUserData>::default())
-            // .add_plugin(bevy_inspector_egui::WorldInspectorPlugin::default())
+            .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
             .add_plugin(ShapePlugin)
+            .add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())
+            // .add_plugin(bevy_inspector_egui::WorldInspectorPlugin::default())
             .init_resource::<AllResourceHandles>()
             .init_resource::<TextureAtlasHandles>()
             .add_system_set(SystemSet::on_enter(AppState::Loading).with_system(setup_system))
@@ -30,8 +29,6 @@ impl Plugin for SetupPlugin {
         app.add_system(bevy::input::system::exit_on_esc_system);
     }
 }
-
-// ====== Resources ======
 
 #[derive(Default)]
 struct AllResourceHandles(Vec<HandleUntyped>);

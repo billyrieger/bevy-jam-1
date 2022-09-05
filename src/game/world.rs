@@ -1,6 +1,7 @@
-use bevy_rapier3d::na::{Isometry3, UnitQuaternion};
-
-use crate::prelude::*;
+use crate::{AppState};
+use bevy::prelude::*;
+use bevy_inspector_egui::Inspectable;
+use bevy_prototype_lyon::prelude::*;
 
 pub const PIXELS_PER_METER: f32 = 16.;
 
@@ -12,11 +13,30 @@ impl Plugin for WorldPlugin {
         app.add_system_set(
             SystemSet::on_update(AppState::InGame)
                 .with_system(polyline_path_system)
-                .with_system(polygon_path_system)
-                .with_system(sync_physics_coords),
+                .with_system(polygon_path_system),
         )
-        .add_system_to_stage(CoreStage::PostUpdate, world_position_sync_system);
+        .add_system_to_stage(CoreStage::PostUpdate, position_sync_system);
     }
+}
+
+#[derive(Component, Default, Inspectable)]
+pub struct Position(pub Vec3);
+
+#[derive(Component, Default)]
+pub struct BaseOffset(pub Vec2);
+
+#[derive(Component)]
+pub struct PositionSync;
+
+#[derive(Component)]
+pub struct SimplePerspective {
+    vanishing_point: Vec2,
+    depth: f32,
+}
+
+pub struct ViewBundle {
+    perspective: SimplePerspective,
+    position: Position,
 }
 
 // Camera points in the negative z direction and the scale factor at z=0 is 1.
@@ -46,27 +66,15 @@ impl CameraView {
     }
 }
 
-#[derive(Component)]
-struct WorldObject {
-    position: WorldPosition,
-}
-
-#[derive(Component, Clone, Copy, Debug, Default)]
-pub struct WorldPosition(pub Vec3);
-
-#[derive(Component, Default)]
-pub struct WorldPositionSync {
-    pub base: Vec2,
-}
-
-fn world_position_sync_system(
+fn position_sync_system(
     camera_view: Res<CameraView>,
-    mut query: Query<(&mut Transform, &WorldPosition, &WorldPositionSync)>,
+    mut query: Query<(&mut Transform, &Position, Option<&BaseOffset>), With<PositionSync>>,
 ) {
     for (mut transform, world_coords, sync) in query.iter_mut() {
         let depth_scale = camera_view.depth_scale(world_coords.0);
+        let base_offset = sync.map(|offset| offset.0).unwrap_or_default();
         transform.translation =
-            (camera_view.to_screen(world_coords.0) - sync.base).extend(depth_scale);
+            (camera_view.to_screen(world_coords.0) - base_offset).extend(depth_scale);
         transform.scale = Vec3::splat(depth_scale);
     }
 }
@@ -78,7 +86,7 @@ pub struct WorldPolyline {
 
 fn polyline_path_system(
     view: Res<CameraView>,
-    mut q_line: Query<(&mut Path, &WorldPolyline, &WorldPosition)>,
+    mut q_line: Query<(&mut Path, &WorldPolyline, &Position)>,
 ) {
     for (mut path, polyline, center) in q_line.iter_mut() {
         let mut builder = PathBuilder::new();
@@ -97,7 +105,7 @@ pub struct WorldPolygon {
 
 fn polygon_path_system(
     view: Res<CameraView>,
-    mut q_polygon: Query<(&mut Path, &WorldPolygon, &WorldPosition)>,
+    mut q_polygon: Query<(&mut Path, &WorldPolygon, &Position)>,
 ) {
     for (mut path, polygon, center) in q_polygon.iter_mut() {
         let points = polygon
@@ -111,11 +119,5 @@ fn polygon_path_system(
                 closed: true,
             })
             .build();
-    }
-}
-
-fn sync_physics_coords(mut query: Query<(&mut WorldPosition, &RigidBodyPositionComponent)>) {
-    for (mut coords, body_position) in query.iter_mut() {
-        coords.0 = body_position.position.translation.into();
     }
 }

@@ -1,11 +1,10 @@
-use std::time::Duration;
-
-use bevy::render::render_resource::FilterMode;
-use bevy::utils::HashMap;
-
-use crate::prelude::*;
+use crate::game::world::*;
 use crate::setup::TextureAtlasHandles;
-use crate::{KEY_CODE_DOWN, KEY_CODE_LEFT, KEY_CODE_RIGHT, KEY_CODE_SECONDARY, KEY_CODE_UP};
+use crate::{
+    default, AppState, KEY_CODE_DOWN, KEY_CODE_LEFT, KEY_CODE_RIGHT, KEY_CODE_SECONDARY,
+    KEY_CODE_UP,
+};
+use bevy::prelude::*;
 
 pub struct PlayerPlugin;
 
@@ -19,17 +18,6 @@ impl Plugin for PlayerPlugin {
                     .with_system(flip_player_system)
                     .with_system(animation_update_system),
             );
-        // .with_system(user_movement_system)
-        // .with_system(user_begin_charge_system)
-        // .with_system(user_release_charge_system)
-        // .with_system(opponent_movement_system)
-        // .with_system(opponent_hit_system)
-        // .with_system(player_spawn_system)
-        // .with_system(tick_swing_cooldown_system)
-        // .with_system(flip_sprite_facing_system)
-        // .with_system(turn_player_toward_ball)
-        // .with_system(set_player_speed_system)
-        // .with_system(update_animation_system),
     }
 }
 
@@ -115,10 +103,9 @@ fn spawn_player_system(
         .insert(User)
         .insert(animations.0[&PlayerState::Idle].clone())
         .insert_bundle((
-            WorldPosition::default(),
-            WorldPositionSync {
-                base: Vec2::new(0., -10.5),
-            },
+            Position::default(),
+            BaseOffset(Vec2::new(0., -10.5)),
+            PositionSync,
         ))
         .insert_bundle(SpriteSheetBundle {
             texture_atlas: texture_atlas_handles.player.clone(),
@@ -159,7 +146,7 @@ fn slow_user_movement_system(
 fn user_movement_system(
     time: Res<Time>,
     keyboard: Res<Input<KeyCode>>,
-    mut query: Query<(&mut PlayerState, &Speed, &mut WorldPosition), With<User>>,
+    mut query: Query<(&mut PlayerState, &Speed, &mut Position), With<User>>,
 ) {
     for (mut state, speed, mut position) in query.iter_mut() {
         if matches!(*state, PlayerState::Charge | PlayerState::Swing) {
@@ -220,10 +207,9 @@ fn flip_player_system(
     }
 }
 
-// Note: not the same as a swing-voting US state.
 enum SwingState {
     Charge,
-    Release
+    Release,
 }
 
 enum ServeState {

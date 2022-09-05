@@ -1,14 +1,4 @@
-#![feature(array_windows, try_blocks)]
-
 use bevy::prelude::*;
-
-mod prelude {
-    pub use crate::game::world::*;
-    pub use crate::{default, AppState};
-    pub use bevy::prelude::*;
-    pub use bevy_prototype_lyon::prelude::*;
-    pub use bevy_rapier3d::prelude::*;
-}
 
 mod game;
 mod setup;

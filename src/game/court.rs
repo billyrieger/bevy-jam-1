@@ -1,6 +1,7 @@
-use crate::prelude::*;
-
-use super::world::WorldPolygon;
+use crate::game::world::*;
+use crate::{default, AppState};
+use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::*;
 
 pub struct CourtPlugin;
 
@@ -93,7 +94,7 @@ fn spawn_court_system(mut commands: Commands, asset_server: Res<AssetServer>) {
                     }),
                     Transform::default(),
                 ))
-                .insert(WorldPosition::default())
+                .insert(Position::default())
                 .insert(WorldPolygon {
                     corners: vec![
                         Vec3::new(1000., 0., 28. - 0.1),
@@ -111,26 +112,22 @@ fn spawn_court_system(mut commands: Commands, asset_server: Res<AssetServer>) {
                     }),
                     Transform::default(),
                 ))
-                .insert_bundle((
-                    CourtSurface,
-                    WorldPosition::default(),
-                    WorldPolygon::default(),
-                ));
+                .insert_bundle((CourtSurface, Position::default(), WorldPolygon::default()));
             parent
                 .spawn_bundle(GeometryBuilder::build_as(
                     &shapes::Rectangle::default(),
                     DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.)),
                     Transform::default(),
                 ))
-                .insert_bundle((WorldPosition::default(), WorldPolyline::default()))
+                .insert_bundle((Position::default(), WorldPolyline::default()))
                 .insert(CourtOutline);
             parent
                 .spawn_bundle(SpriteBundle {
                     texture: asset_server.load("textures/net.png"),
                     ..default()
                 })
-                .insert(WorldPosition(Vec3::new(0., 0.5, 0.)))
-                .insert(WorldPositionSync::default());
+                .insert(Position(Vec3::new(0., 0.5, 0.)))
+                .insert(PositionSync);
         });
 }
 

@@ -1,12 +1,10 @@
+use crate::game::player::PlayerState;
+use crate::AppState;
+use bevy::prelude::*;
+use bevy::utils::HashMap;
 use std::time::Duration;
 
-use bevy::utils::HashMap;
-
-use crate::*;
-
-use super::player::{self, *};
-
-pub(crate) struct AnimationPlugin;
+pub struct AnimationPlugin;
 
 impl Plugin for AnimationPlugin {
     fn build(&self, app: &mut App) {
@@ -22,32 +20,49 @@ pub struct Frame {
     duration: Duration,
 }
 
-pub struct PlayerFrameData(pub HashMap<player::PlayerState, Animation>);
+pub struct PlayerFrameData(pub HashMap<PlayerState, Animation>);
 
 impl Default for PlayerFrameData {
     fn default() -> Self {
+        const MSEC: Duration = Duration::from_millis(1);
         // TODO: find a better way to store the frame data. Tweaking the animations in this format
         // is arduous. Is there a third-party plugin to work with spritesheet animations?
         let data = HashMap::from_iter([
             (
                 PlayerState::ServeReady,
-                Animation::new([(0, u64::MAX)], false),
+                Animation::new([(0, Duration::MAX)], false),
             ),
             (
                 PlayerState::ServeToss,
-                Animation::new([(1, u64::MAX)], false),
+                Animation::new([(1, Duration::MAX)], false),
             ),
             (
                 PlayerState::ServeHit,
-                Animation::new([(2, 50), (3, 300)], false),
+                Animation::new([(2, 50 * MSEC), (3, 300 * MSEC)], false),
             ),
             (
                 PlayerState::Idle,
-                Animation::new([(4, 300), (5, 100), (6, 200), (7, 100)], true),
+                Animation::new(
+                    [
+                        (4, 300 * MSEC),
+                        (5, 100 * MSEC),
+                        (6, 200 * MSEC),
+                        (7, 100 * MSEC),
+                    ],
+                    true,
+                ),
             ),
             (
                 PlayerState::Run,
-                Animation::new([(11, 150), (8, 75), (9, 150), (10, 75)], true),
+                Animation::new(
+                    [
+                        (11, 150 * MSEC),
+                        (8, 75 * MSEC),
+                        (9, 150 * MSEC),
+                        (10, 75 * MSEC),
+                    ],
+                    true,
+                ),
             ),
         ]);
         Self(data)
@@ -62,13 +77,10 @@ pub struct Animation {
 
 impl Animation {
     // usize is frame index, u64 is frame length in milliseconds
-    pub fn new(frame_data: impl IntoIterator<Item = (usize, u64)>, repeating: bool) -> Self {
+    pub fn new(frame_data: impl IntoIterator<Item = (usize, Duration)>, repeating: bool) -> Self {
         let frames: Vec<Frame> = frame_data
             .into_iter()
-            .map(|(i, duration)| Frame {
-                index: i,
-                duration: Duration::from_millis(duration),
-            })
+            .map(|(index, duration)| Frame { index, duration })
             .collect();
         let total_duration = frames.iter().fold(Duration::ZERO, |acc, frame| {
             acc.saturating_add(frame.duration)
